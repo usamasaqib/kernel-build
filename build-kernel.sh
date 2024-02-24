@@ -101,6 +101,7 @@ package=kernel-"${TARGET_TAG}"."${ARCH}".pkg
 if [ -d "${package}" ]; then
     rm -rf "${package}"
 fi
+mkdir "${package}"
 
 cp "${LINUX_SRC_DIR}"/arch/"${ARCH}"/boot/"${BZ_IMAGE}" "${package}"
 cp "${LINUX_SRC_DIR}"/vmlinux "${package}"
