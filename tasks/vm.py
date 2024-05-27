@@ -113,10 +113,12 @@ def init(ctx, kernel_version):
         manifest = json.load(f)
 
    
-    if "gdb_port" in manifest:
+    if "gdb_port" not in manifest:
         port = find_free_gdb_port()
         if port == 0:
             raise Exit("unable to find free port for gdb server")
+    else:
+        port = manifest["gdb_port"]
 
     scripts_dir = os.path.join(".", "scripts")
     qemu_script = os.path.abspath(os.path.join(scripts_dir, "qemu-launch.sh"))
