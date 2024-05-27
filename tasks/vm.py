@@ -1,7 +1,9 @@
 import os
+import socket
 import netifaces
 import json
 from invoke import task
+from glob import glob
 from invoke.exceptions import Exit
 from tasks.kernel import build as kbuild
 from tasks.rootfs import build as rootfs_build
@@ -58,12 +60,33 @@ def setup_kernel_package(ctx, kernel_version):
     rootfs_build(ctx, kernel_version)
 
 
-@task
-def add_gdb_script(ctx, kernel_version):
+def find_free_gdb_port():
+    kernel_dir = os.path.join(".", "kernels", "sources")
+    all_kernels = glob(f"{kernel_dir}/kernel-*")
+    ports = list()
+    for k in all_kernels:
+        if not os.path.isdir(k):
+            continue
+
+        with open(os.path.join(k, "kernel.manifest"), "r") as f:
+            manifest = json.load(f)
+            if "gdb_port" in manifest:
+                ports.append(manifest["gdb_port"])
+
+    for i in range(5432, 6432):
+        if i not in ports:
+            return i
+
+    return 0
+
+
+def add_gdb_script(ctx, kernel_version, port):
     kdir = os.path.join(".", "kernels", "sources", f"kernel-{kernel_version}")
     if not os.path.exists(kdir):
         raise Exit(f"Kernel directory 'kernel-{kernel_version}' not present")
 
+    cfg = os.path.join(".", "kernels", "sources", "linux-stable", ".config")
+    ctx.run(f"cp {cfg} {kdir}/linux-source")
     ctx.run(f"cd {kdir}/linux-source && make scripts_gdb")
 
     dbg_img = os.path.abspath(os.path.join(kdir, "vmlinux"))
@@ -74,7 +97,7 @@ def add_gdb_script(ctx, kernel_version):
     with open(gdb_script, 'w') as f:
         f.write("#!/bin/bash\n")
         f.write(f'gdb -ex "add-auto-load-safe-path {src_dir}" -ex "file {dbg_img}" -ex "set arch i386:x86-64:intel" \
-                -ex "target remote localhost:1234" -ex "source {vmlinux_gdb}" -ex "set disassembly-flavor inter" \
+                -ex "target remote localhost:{port}" -ex "source {vmlinux_gdb}" -ex "set disassembly-flavor inter" \
                 -ex "set pagination off"\n')
 
     ctx.run(f"chmod +x {gdb_script}")
@@ -86,6 +109,15 @@ def init(ctx, kernel_version):
     if not os.path.exists(kernel_dir):
         setup_kernel_package(ctx, kernel_version)
 
+    with open(os.path.join(kernel_dir, "kernel.manifest"), "r") as f:
+        manifest = json.load(f)
+
+   
+    if "gdb_port" in manifest:
+        port = find_free_gdb_port()
+        if port == 0:
+            raise Exit("unable to find free port for gdb server")
+
     scripts_dir = os.path.join(".", "scripts")
     qemu_script = os.path.abspath(os.path.join(scripts_dir, "qemu-launch.sh"))
 
@@ -93,21 +125,19 @@ def init(ctx, kernel_version):
 
     kabspath = os.path.abspath(kernel_dir)
     ctx.run(
-        f"echo 'sudo {qemu_script} {kabspath}/rootfs.qcow2 {kabspath}/bzImage {tap}' > {kernel_dir}/run.sh"
+        f"echo 'sudo {qemu_script} {kabspath}/rootfs.qcow2 {kabspath}/bzImage {tap} {port}' > {kernel_dir}/run.sh"
     )
     ctx.run(f"chmod +x {kabspath}/run.sh")
 
-    with open(os.path.join(kernel_dir, "kernel.manifest"), "r") as f:
-        manifest = json.load(f)
-
     manifest["tap_name"] = tap
+    manifest["gdb_port"] = port
     with open(os.path.join(kernel_dir, "kernel.manifest"), "w") as f:
         json.dump(manifest, f)
 
     kernel_source = os.path.join(".", "kernels", "sources")
-    ctx.run(f"rm -f {kernel_source}/linux-*")
+    ctx.run(f"rm -f {kernel_source}/linux-*", warn=True)
 
-    add_gdb_script(ctx, kernel_version)
+    add_gdb_script(ctx, kernel_version, port)
 
 
 # @task

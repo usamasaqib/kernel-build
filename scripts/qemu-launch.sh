@@ -3,10 +3,11 @@
 ROOTFS=$1
 KERNEL=$2
 TAP_INTERFACE=$3
+GDB_PORT=$4
    
 exec qemu-system-x86_64 \
-    -s \
-    -m 2G \
+    -gdb tcp:127.0.0.1:$GDB_PORT \
+    -m 4G \
     -smp 4 \
     -kernel $KERNEL \
     -append "console=ttyS0 acpi=off panic=-1 root=/dev/vda rw net.ifnames=0 reboot=t nokaslr" \
