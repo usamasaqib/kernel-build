@@ -3,7 +3,7 @@
 set -euxo pipefail
 
 # python3 should be installed
-pip3 install invoke
+pip3 install invoke netifaces
 
 sudo apt update
 sudo apt install -y git \
@@ -11,6 +11,7 @@ sudo apt install -y git \
     bison \
     flex \
     libelf-dev \
+    libdw-dev \
     cpio \
     build-essential \
     libssl-dev \
@@ -25,4 +26,4 @@ git checkout v1.22
 mkdir build
 cd build
 cmake -D__LIB=lib -DCMAKE_INSTALL_PREFIX=/usr/ ..
-make install
+sudo make install
