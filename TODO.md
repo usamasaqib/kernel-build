@@ -1,0 +1,2 @@
+- Use [ccache](https://ccache.dev/) to improbe kernel build times
+- Dynamicall add '-S' flag to qemu
