@@ -1,6 +1,8 @@
 from glob import glob
 import os
 from invoke import task
+import uuid
+import json
 
 KERNEL_6_8 = "6.8"
 ARCH = "x86"
@@ -83,6 +85,7 @@ def configure(ctx, kernel_version=KERNEL_6_8):
     make_config(ctx)
 
 
+@task
 def build_package(ctx, version):
     sources_dir = os.path.join(".", "kernels", "sources")
     deb_files = glob(f"{sources_dir}/*.deb")
@@ -92,19 +95,61 @@ def build_package(ctx, version):
     for pkg in deb_files:
         ctx.run(f"mv {pkg} {kdir}")
 
-    ctx.run("mv {sources_dir}/linux-stable/vmlinux {kdir}")
-    ctx.run("mv {sources_dir)/linux-stable/arch/x86/boot/bzImage {kdir}")
+    ctx.run(f"mv {sources_dir}/linux-stable/vmlinux {kdir}")
+    ctx.run(f"mv {sources_dir}/linux-stable/arch/x86/boot/bzImage {kdir}")
+
+    ctx.run(f"mkdir {kdir}/linux-source")
+    if os.path.exists(f"{sources_dir}/linux-stable/linux.tar.gz"):
+        ctx.run(f"mv {sources_dir}/linux-stable/linux.tar.gz {kdir}")
+    else:
+        upstream = glob("./**/linux-upstream*", recursive=True)
+        print(upstream)
+        for f in upstream:
+            if "orig.tar.gz" in f:
+                ctx.run(f"mv {f} {kdir}/linux.tar.gz")
+
+    ctx.run(f"tar -xvf {kdir}/linux.tar.gz -C {kdir}/linux-source --strip-components=1")
+
+
+def kuuid(ctx, kernel_version):
+    kid = str(uuid.uuid4())
+    kernel_dir = os.path.join(".", "kernels", "sources", f"kernel-{kernel_version}")
+    manifest = {"kid": kid}
+    with open(f"{kernel_dir}/kernel.manifest", "w+") as f:
+        json.dump(manifest, f)
 
 
 @task
-def build(ctx, kernel_version=KERNEL_6_8, skip_patch=True, arch=ARCH):
+def build(ctx, kernel_version=KERNEL_6_8, skip_patch=True, arch=ARCH, save_context=False):
+    kernel_dir = os.path.join(".", "kernels", "sources")
+
+    context = None
+    if os.path.exists(f"{kernel_dir}/build.context"):
+        with open(f"{kernel_dir}/build.context", 'r') as f:
+            context = f.read().split('\n')[0]
+
+    if save_context:
+        if context and context != kernel_version:
+            raise Exit("already existing context for build '{context}'. Clean existing context first.")
+        if not context:
+            clean(ctx)
+    else:
+        clean(ctx)
+
     checkout_kernel(ctx, kernel_version)
     if not skip_patch:
         apply_patches(ctx, kernel_version)
 
     make_config(ctx)
     make_kernel(ctx)
-    build_package(ctx, version)
+    build_package(ctx, kernel_version)
+    kuuid(ctx, kernel_version)
+
+    if save_context:
+        ctx.run(f"rm -f {kernel_dir}/build.context")
+        ctx.run(f"echo 'kernel_version' > {kernel_dir}/build.context")
+
+
     # compile_headers(ctx, kernel_version, arch)
 
 
@@ -117,3 +162,5 @@ def clean(ctx):
     ctx.run(f"cd {kernel_source} && rm .config", warn=True)
     ctx.run(f"cd {kernel_source} && rm -r debian", warn=True)
     ctx.run(f"cd {sources_dir} && rm *", warn=True)
+    ctx.run("rm -f kernels/sources/linux-stable/vmlinux-gdb.py")
+    ctx.run("rm -f kernels/sources/linux-stable/linux.tar.gz")
