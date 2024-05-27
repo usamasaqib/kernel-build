@@ -5,6 +5,7 @@ KERNEL=$2
 TAP_INTERFACE=$3
    
 exec qemu-system-x86_64 \
+    -s \
     -m 2G \
     -smp 4 \
     -kernel $KERNEL \

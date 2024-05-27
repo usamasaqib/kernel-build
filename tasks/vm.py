@@ -59,6 +59,28 @@ def setup_kernel_package(ctx, kernel_version):
 
 
 @task
+def add_gdb_script(ctx, kernel_version):
+    kdir = os.path.join(".", "kernels", "sources", f"kernel-{kernel_version}")
+    if not os.path.exists(kdir):
+        raise Exit(f"Kernel directory 'kernel-{kernel_version}' not present")
+
+    ctx.run(f"cd {kdir}/linux-source && make scripts_gdb")
+
+    dbg_img = os.path.abspath(os.path.join(kdir, "vmlinux"))
+    src_dir = os.path.abspath(os.path.join(kdir, "linux-source"))
+    vmlinux_gdb = os.path.abspath(os.path.join(src_dir, "vmlinux-gdb.py"))
+
+    gdb_script = os.path.join(kdir, "gdb.sh")
+    with open(gdb_script, 'w') as f:
+        f.write("#!/bin/bash\n")
+        f.write(f'gdb -ex "add-auto-load-safe-path {src_dir}" -ex "file {dbg_img}" -ex "set arch i386:x86-64:intel" \
+                -ex "target remote localhost:1234" -ex "source {vmlinux_gdb}" -ex "set disassembly-flavor inter" \
+                -ex "set pagination off"\n')
+
+    ctx.run(f"chmod +x {gdb_script}")
+
+
+@task
 def init(ctx, kernel_version):
     kernel_dir = os.path.join(".", "kernels", "sources", f"kernel-{kernel_version}")
     if not os.path.exists(kernel_dir):
@@ -84,6 +106,8 @@ def init(ctx, kernel_version):
 
     kernel_source = os.path.join(".", "kernels", "sources")
     ctx.run(f"rm -f {kernel_source}/linux-*")
+
+    add_gdb_script(ctx, kernel_version)
 
 
 # @task
