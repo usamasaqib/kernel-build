@@ -58,15 +58,15 @@ def apply_patches(ctx, version):
         patch_target(ctx, version, patch)
 
 
-def make_config(ctx):
+def make_config(ctx, extra_config):
     kernel_dir = os.path.join(".", "kernels", "sources", "linux-stable")
     config_dir = os.path.join(".", "kernels", "configs")
     dot_config = os.path.join(kernel_dir, ".config")
-    extra_config = os.path.join(config_dir, "extra.config")
 
     ctx.run(f"make -C {kernel_dir} defconfig")
     ctx.run(f"make -C {kernel_dir} kvm_guest.config")
     ctx.run(f"tee -a < {extra_config} {dot_config}")
+
     ctx.run(f"make -C {kernel_dir} olddefconfig")
 
 
@@ -78,11 +78,6 @@ def make_kernel(ctx):
 @task
 def checkout(ctx, kernel_version=KERNEL_6_8):
     checkout_kernel(ctx, kernel_version)
-
-
-@task
-def configure(ctx, kernel_version=KERNEL_6_8):
-    make_config(ctx)
 
 
 @task
@@ -119,8 +114,10 @@ def kuuid(ctx, kernel_version):
         json.dump(manifest, f)
 
 
+EXTRA_CONFIG = "./kernels/configs/extra.config"
+
 @task
-def build(ctx, kernel_version=KERNEL_6_8, skip_patch=True, arch=ARCH, save_context=False):
+def build(ctx, kernel_version=KERNEL_6_8, skip_patch=True, arch=ARCH, save_context=False, extra_config=EXTRA_CONFIG):
     kernel_dir = os.path.join(".", "kernels", "sources")
 
     context = None
@@ -140,7 +137,7 @@ def build(ctx, kernel_version=KERNEL_6_8, skip_patch=True, arch=ARCH, save_conte
     if not skip_patch:
         apply_patches(ctx, kernel_version)
 
-    make_config(ctx)
+    make_config(ctx, extra_config)
     make_kernel(ctx)
     build_package(ctx, kernel_version)
     kuuid(ctx, kernel_version)

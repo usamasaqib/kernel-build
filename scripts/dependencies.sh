@@ -4,7 +4,7 @@
 pip3 install invoke
 
 sudo apt update
-sudo apt install git \
+sudo apt install -y git \
     bc \
     bison \
     flex \
