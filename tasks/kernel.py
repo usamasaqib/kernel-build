@@ -133,7 +133,7 @@ def build(ctx, kernel_version=KERNEL_6_8, skip_patch=True, arch=ARCH, save_conte
             raise Exit("already existing context for build '{context}'. Clean existing context first.")
         if not context:
             clean(ctx)
-    else:
+    elif os.path.exists(".", "kernels", "sources", "linux-stable"):
         clean(ctx)
 
     checkout_kernel(ctx, kernel_version)

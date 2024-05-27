@@ -20,6 +20,3 @@ exec qemu-system-x86_64 \
     -no-reboot \
     -no-acpi \
     2>&1 | tee vm.log
-
-
-    #-device virtio-net-pci,netdev=mynet0,mac=52:55:00:d1:55:01,id=net0 \
