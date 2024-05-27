@@ -180,6 +180,9 @@ def build(
     chroot = os.path.join(images_dir, "chroot")
     release_img = os.path.join(images_dir, f"{release}.img")
 
+    if not os.path.exists(images_dir):
+        ctx.run(f"mkdir {images_dir}")
+
     # build image
     ctx.run(f"dd if=/dev/zero of={release_img} bs=1 count=0 seek={img_size}")
     ctx.run(f"mkfs.ext2 -F {release_img}")
