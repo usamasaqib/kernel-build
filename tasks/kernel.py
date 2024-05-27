@@ -94,14 +94,10 @@ def build_package(ctx, version):
     ctx.run(f"mv {sources_dir}/linux-stable/arch/x86/boot/bzImage {kdir}")
 
     ctx.run(f"mkdir {kdir}/linux-source")
-    if os.path.exists(f"{sources_dir}/linux-stable/linux.tar.gz"):
-        ctx.run(f"mv {sources_dir}/linux-stable/linux.tar.gz {kdir}")
-    else:
-        upstream = glob("./**/linux-upstream*", recursive=True)
-        print(upstream)
-        for f in upstream:
-            if "orig.tar.gz" in f:
-                ctx.run(f"mv {f} {kdir}/linux.tar.gz")
+    upstream = glob("./**/linux-upstream*", recursive=True)
+    for f in upstream:
+        if "orig.tar.gz" in f:
+            ctx.run(f"mv {f} {kdir}/linux.tar.gz")
 
     ctx.run(f"tar -xvf {kdir}/linux.tar.gz -C {kdir}/linux-source --strip-components=1")
 
