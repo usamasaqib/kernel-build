@@ -17,7 +17,8 @@ sudo apt install -y git \
     libssl-dev \
     debhelper-compat \
     debootstrap \
-    cmake
+    cmake \
+    qemu-utils
 
 git -c http.sslVerify=false clone --recurse-submodules https://github.com/acmel/dwarves.git /tmp/dwarves
 cd /tmp/dwarves
