@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euxo pipefail
+
 # python3 should be installed
 pip3 install invoke
 
@@ -17,7 +19,7 @@ sudo apt install -y git \
     cmake
 
 git -c http.sslVerify=false clone --recurse-submodules https://github.com/acmel/dwarves.git /tmp/dwarves
-cd dwarves
+cd /tmp/dwarves
 git config http.sslVerify "false"
 git checkout v1.22
 mkdir build
