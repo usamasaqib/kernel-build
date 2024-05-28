@@ -27,4 +27,4 @@ git checkout v1.22
 mkdir build
 cd build
 cmake -D__LIB=lib -DCMAKE_INSTALL_PREFIX=/usr/ ..
-sudo make install
+make install
