@@ -10,6 +10,13 @@ The VM:
 
 Moreover, a script `gdb.sh` is provided to easily attach a debugger session to the running VM. The script setsup the debug symbols and provides the correct source code files to gdb.
 
+## Dependencies
+Review and run 
+```
+./scripts/dependencies.sh
+```
+
+
 ## Setup
 A single command will set everything up from scratch. The first run will take a long time, but subsequent runs should be much faster because the scripts attempt to cache everything locally.
 
