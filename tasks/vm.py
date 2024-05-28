@@ -94,7 +94,7 @@ def add_gdb_script(ctx, kernel_version, port):
     vmlinux_gdb = os.path.abspath(os.path.join(src_dir, "vmlinux-gdb.py"))
 
     gdb_script = os.path.join(kdir, "gdb.sh")
-    with open(gdb_script, 'w') as f:
+    with open(gdb_script, "w") as f:
         f.write("#!/bin/bash\n")
         f.write(f'gdb -ex "add-auto-load-safe-path {src_dir}" -ex "file {dbg_img}" -ex "set arch i386:x86-64:intel" \
                 -ex "target remote localhost:{port}" -ex "source {vmlinux_gdb}" -ex "set disassembly-flavor inter" \
@@ -112,7 +112,6 @@ def init(ctx, kernel_version):
     with open(os.path.join(kernel_dir, "kernel.manifest"), "r") as f:
         manifest = json.load(f)
 
-   
     if "gdb_port" not in manifest:
         port = find_free_gdb_port()
         if port == 0:

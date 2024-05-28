@@ -112,18 +112,28 @@ def kuuid(ctx, kernel_version):
 
 EXTRA_CONFIG = "./kernels/configs/extra.config"
 
+
 @task
-def build(ctx, kernel_version=KERNEL_6_8, skip_patch=True, arch=ARCH, save_context=False, extra_config=EXTRA_CONFIG):
+def build(
+    ctx,
+    kernel_version=KERNEL_6_8,
+    skip_patch=True,
+    arch=ARCH,
+    save_context=False,
+    extra_config=EXTRA_CONFIG,
+):
     kernel_dir = os.path.join(".", "kernels", "sources")
 
     context = None
     if os.path.exists(f"{kernel_dir}/build.context"):
-        with open(f"{kernel_dir}/build.context", 'r') as f:
-            context = f.read().split('\n')[0]
+        with open(f"{kernel_dir}/build.context", "r") as f:
+            context = f.read().split("\n")[0]
 
     if save_context:
         if context and context != kernel_version:
-            raise Exit("already existing context for build '{context}'. Clean existing context first.")
+            raise Exit(
+                "already existing context for build '{context}'. Clean existing context first."
+            )
         if not context:
             clean(ctx)
     elif os.path.exists(os.path.join(".", "kernels", "sources", "linux-stable")):
@@ -141,7 +151,6 @@ def build(ctx, kernel_version=KERNEL_6_8, skip_patch=True, arch=ARCH, save_conte
     if save_context:
         ctx.run(f"rm -f {kernel_dir}/build.context")
         ctx.run(f"echo 'kernel_version' > {kernel_dir}/build.context")
-
 
     # compile_headers(ctx, kernel_version, arch)
 

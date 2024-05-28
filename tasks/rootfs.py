@@ -45,7 +45,6 @@ def install_deb_packages(ctx, kernel_version):
     if not os.path.exists(pkg_dir):
         raise Exit(f"package dir for version {kernel_version} does not exist")
 
-    
     deb_files = glob.glob(f"{pkg_dir}/linux-image*.deb")
     chroot = os.path.join(".", "images", "chroot")
     scratch = os.path.join(".", "images", "scratch")
