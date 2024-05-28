@@ -14,7 +14,7 @@ Moreover, a script `gdb.sh` is provided to easily attach a debugger session to t
 A single command will set everything up from scratch. The first run will take a long time, but subsequent runs should be much faster because the scripts attempt to cache everything locally.
 
 ```
-inv -e vm,init --kernel-version=6.8
+inv -e vm.init --kernel-version=6.8
 ```
 
 The above command will:
@@ -44,7 +44,7 @@ To attach a gdb session do
 ```
 
 ## Multiple VMs
-The scripts allow a user to build VM from multiple kernels and launch them simultaneously.   
+The scripts allow a user to build VMs from multiple kernels and launch them simultaneously.   
 To set up new VM simply run
 
 ```
@@ -54,7 +54,7 @@ inv -e vm.init --kernel-version=5.18
 And follow the above steps to interact with the VM.
 
 ## Kernel development
-It is possible to rebuild and the kernel a relaunch VM with the new kernel.   
+It is possible to rebuild and the kernel and relaunch VM with the new kernel.   
 To do this first shutdown the VM. You can do this from the QEMU console by `Ctrl+a+x`
 
 Then compile the kernel again  
