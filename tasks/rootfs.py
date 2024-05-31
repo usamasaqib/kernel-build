@@ -127,8 +127,9 @@ echo "auto eth0\niface eth0 inet static\n\taddress {guest_ip}/30\n\tgateway {tap
     )
 
     kdir_abs = os.path.abspath(kernel_dir)
+    # ServerAliveInterval=100000 is set so long debug sessions do not kill the ssh session due to keep alive issues
     ctx.run(
-        f"echo 'ssh -o StrictHostKeyChecking=false root@{guest_ip} -i {kdir_abs}/vm-{kuuid}.id_rsa' > {kernel_dir}/ssh_connect"
+        f"echo 'ssh -o StrictHostKeyChecking=false -o ServerAliveInterval=100000 root@{guest_ip} -i {kdir_abs}/vm-{kuuid}.id_rsa' > {kernel_dir}/ssh_connect"
     )
     ctx.run(f"chmod +x {kernel_dir}/ssh_connect")
 
