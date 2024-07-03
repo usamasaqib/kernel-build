@@ -86,14 +86,14 @@ def build_package(ctx, version):
     deb_files = glob(f"{sources_dir}/*.deb")
 
     kdir = os.path.join(sources_dir, f"kernel-{version}")
-    ctx.run(f"mkdir {kdir}")
+    ctx.run(f"mkdir -p {kdir}")
     for pkg in deb_files:
         ctx.run(f"mv {pkg} {kdir}")
 
     ctx.run(f"mv {sources_dir}/linux-stable/vmlinux {kdir}")
     ctx.run(f"mv {sources_dir}/linux-stable/arch/x86/boot/bzImage {kdir}")
 
-    ctx.run(f"mkdir {kdir}/linux-source")
+    ctx.run(f"rm -rf {kdir}/linux-source && mkdir {kdir}/linux-source")
     upstream = glob("./**/linux-upstream*", recursive=True)
     for f in upstream:
         if "orig.tar.gz" in f:
