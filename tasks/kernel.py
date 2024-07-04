@@ -72,7 +72,7 @@ def make_config(ctx, extra_config):
 
 def make_kernel(ctx):
     kernel_dir = os.path.join(".", "kernels", "sources", "linux-stable")
-    ctx.run(f"make -C {kernel_dir} -j$(nproc) deb-pkg")
+    ctx.run(f"make -C {kernel_dir} -j$(nproc) deb-pkg KCFLAGS=-ggdb3")
 
 
 @task
