@@ -39,12 +39,21 @@ def setup_tap_interface(ctx, kernel_version):
     ).stdout.split()[0]
 
     tap_ip = manifest["gateway_ip"]
+    if "tap_name" in manifest:
+        old_tap = manifest["tap_name"]
+        ctx.run(f"sudo ip link del {old_tap}", warn=True)
+
     tap_name = tap_interface_name()
     ctx.run(f"sudo ip link del {tap_name}", warn=True)
     ctx.run(f"sudo ip tuntap add {tap_name} mode tap")
     ctx.run(f"sudo ip addr add {tap_ip}/30 dev {tap_name}")
     ctx.run(f"sudo ip link set dev {tap_name} up")
     ctx.run("sudo sh -c 'echo 1 > /proc/sys/net/ipv4/ip_forward'")
+
+    '''
+    This iptables rule effectively sets up NAT for outbound traffic on interface {default_interface}, 
+    allowing devices on the local network to access the internet using the public IP address associated with {default_interface}
+    '''
     ctx.run(f"sudo iptables -t nat -A POSTROUTING -o {default_interface} -j MASQUERADE")
     ctx.run(
         "sudo iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT"
