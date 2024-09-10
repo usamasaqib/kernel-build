@@ -83,7 +83,7 @@ def checkout(ctx, kernel_version=KERNEL_6_8):
 
 
 @task
-def build_package(ctx, version):
+def build_package(ctx, version, arch):
     sources_dir = os.path.join(".", "kernels", "sources")
     deb_files = glob(f"{sources_dir}/*.deb")
 
@@ -93,7 +93,7 @@ def build_package(ctx, version):
         ctx.run(f"mv {pkg} {kdir}")
 
     ctx.run(f"mv {sources_dir}/linux-stable/vmlinux {kdir}")
-    ctx.run(f"mv {sources_dir}/linux-stable/arch/x86/boot/bzImage {kdir}")
+    ctx.run(f"mv {sources_dir}/linux-stable/arch/{arch}/boot/{kImage[arch]} {kdir}")
 
     ctx.run(f"rm -rf {kdir}/linux-source && mkdir {kdir}/linux-source")
     upstream = glob("./**/linux-upstream*", recursive=True)
@@ -147,7 +147,7 @@ def build(
 
     make_config(ctx, extra_config)
     make_kernel(ctx)
-    build_package(ctx, kernel_version)
+    build_package(ctx, kernel_version, arch)
     kuuid(ctx, kernel_version)
 
     if save_context:
