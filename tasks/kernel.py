@@ -5,8 +5,10 @@ import uuid
 import json
 
 KERNEL_6_8 = "6.8"
-ARCH = "x86"
+DEFAULT_ARCH = "x86"
 
+
+kImage = {"x86": "bzImage", "arm64": "Image.bz" }
 
 def checkout_kernel(ctx, kernel_version, pull=False):
     if len(kernel_version.split(".")) != 2:
@@ -118,7 +120,7 @@ def build(
     ctx,
     kernel_version=KERNEL_6_8,
     skip_patch=True,
-    arch=ARCH,
+    arch=DEFAULT_ARCH,
     save_context=False,
     extra_config=EXTRA_CONFIG,
 ):

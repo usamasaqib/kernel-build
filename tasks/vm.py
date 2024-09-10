@@ -5,7 +5,7 @@ import json
 from invoke import task
 from glob import glob
 from invoke.exceptions import Exit
-from tasks.kernel import build as kbuild
+from tasks.kernel import DEFAULT_ARCH, build as kbuild
 from tasks.rootfs import build as rootfs_build
 
 IP_ADDR = "169.254.0.%s"
@@ -64,8 +64,8 @@ def setup_tap_interface(ctx, kernel_version):
     return tap_name
 
 
-def setup_kernel_package(ctx, kernel_version):
-    kbuild(ctx, kernel_version)
+def setup_kernel_package(ctx, kernel_version, arch):
+    kbuild(ctx, kernel_version, arch)
     rootfs_build(ctx, kernel_version)
 
 
@@ -113,10 +113,14 @@ def add_gdb_script(ctx, kernel_version, port):
 
 
 @task
-def init(ctx, kernel_version):
+def init(ctx, kernel_version, arch=DEFAULT_ARCH):
     kernel_dir = os.path.join(".", "kernels", "sources", f"kernel-{kernel_version}")
+
+    if arch not in kImage:
+        raise Exit(f"Invalid arch {arch}")
+
     if not os.path.exists(kernel_dir):
-        setup_kernel_package(ctx, kernel_version)
+        setup_kernel_package(ctx, kernel_version, arch)
 
     with open(os.path.join(kernel_dir, "kernel.manifest"), "r") as f:
         manifest = json.load(f)
