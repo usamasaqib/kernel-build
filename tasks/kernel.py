@@ -23,7 +23,7 @@ def checkout_kernel(ctx, kernel_version, pull=False):
         ctx.run(f"cd {linux_stable} && git pull")
 
     tag_res = ctx.run(
-        f"cd {linux_stable} && git tag | grep 'v{kernel_version}.*$' | sort | tail -1"
+        f"cd {linux_stable} && git tag | grep 'v{kernel_version}.*$' | sort -V | tail -1"
     )
     tag = tag_res.stdout.split()[0]
 
