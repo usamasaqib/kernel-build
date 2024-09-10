@@ -5,7 +5,7 @@ import json
 from invoke import task
 from glob import glob
 from invoke.exceptions import Exit
-from tasks.kernel import DEFAULT_ARCH, build as kbuild
+from tasks.kernel import DEFAULT_ARCH, kImage, build as kbuild
 from tasks.rootfs import build as rootfs_build
 
 IP_ADDR = "169.254.0.%s"
