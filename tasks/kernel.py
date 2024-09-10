@@ -8,7 +8,7 @@ KERNEL_6_8 = "6.8"
 DEFAULT_ARCH = "x86"
 
 
-kImage = {"x86": "bzImage", "arm64": "Image.bz" }
+kImage = {"x86": "bzImage", "arm64": "Image.gz" }
 
 def checkout_kernel(ctx, kernel_version, pull=False):
     if len(kernel_version.split(".")) != 2:
@@ -125,6 +125,9 @@ def build(
     extra_config=EXTRA_CONFIG,
 ):
     kernel_dir = os.path.join(".", "kernels", "sources")
+
+    if arch not in kImage:
+        raise Exit(f"Invalid arch {arch}")
 
     context = None
     if os.path.exists(f"{kernel_dir}/build.context"):

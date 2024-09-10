@@ -65,7 +65,7 @@ def setup_tap_interface(ctx, kernel_version):
 
 
 def setup_kernel_package(ctx, kernel_version, arch):
-    kbuild(ctx, kernel_version, arch)
+    kbuild(ctx, kernel_version=kernel_version, arch=arch)
     rootfs_build(ctx, kernel_version)
 
 
