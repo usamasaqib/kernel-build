@@ -96,10 +96,20 @@ def build_package(ctx, version, arch):
     ctx.run(f"mv {sources_dir}/linux-stable/arch/{arch}/boot/{kImage[arch]} {kdir}")
 
     ctx.run(f"rm -rf {kdir}/linux-source && mkdir {kdir}/linux-source")
-    upstream = glob("./**/linux-upstream*", recursive=True)
+    upstream = glob("./**/linux-*", recursive=True)
+    found = False
     for f in upstream:
-        if "orig.tar.gz" in f:
+        if arch == "x86" and "upstream" in f and "orig.tar.gz" in f:
             ctx.run(f"mv {f} {kdir}/linux.tar.gz")
+        elif arch == "arm64" and "orig.tar.gz" in f:
+            ctx.run(f"mv {f} {kdir}/linux.tar.gz")
+        else:
+            continue
+        
+        found = True
+
+    if not found:
+        raise Exit("unable to find source package")
 
     ctx.run(f"tar -xvf {kdir}/linux.tar.gz -C {kdir}/linux-source --strip-components=1")
 
