@@ -139,7 +139,7 @@ def init(ctx, kernel_version, arch=DEFAULT_ARCH):
 
     kabspath = os.path.abspath(kernel_dir)
     ctx.run(
-        f"echo 'sudo {qemu_script} {kabspath}/rootfs.qcow2 {kabspath}/bzImage {tap} {port}' > {kernel_dir}/run.sh"
+        f"echo 'sudo {qemu_script} {kabspath}/rootfs.qcow2 {kabspath}/{kImage[arch]} {tap} {port}' > {kernel_dir}/run.sh"
     )
     ctx.run(f"chmod +x {kabspath}/run.sh")
 
