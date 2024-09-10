@@ -3,12 +3,21 @@ import os
 from invoke import task
 import uuid
 import json
+import platform
 
 KERNEL_6_8 = "6.8"
-DEFAULT_ARCH = "x86"
-
 
 kImage = {"x86": "bzImage", "arm64": "Image.gz" }
+
+arch_mapping = {
+    "amd64": "x86",
+    "x86_64": "x86",
+    "x64": "x86",
+    "i386": "x86",
+    "i686": "x86",
+    "aarch64": "arm64",  # linux
+    "arm64": "arm64",  # darwin
+}
 
 def checkout_kernel(ctx, kernel_version, pull=False):
     if len(kernel_version.split(".")) != 2:
@@ -130,10 +139,13 @@ def build(
     ctx,
     kernel_version=KERNEL_6_8,
     skip_patch=True,
-    arch=DEFAULT_ARCH,
+    arch=None,
     save_context=False,
     extra_config=EXTRA_CONFIG,
 ):
+    if arch is None:
+        arch = arch_mapping[platform.machine()]
+
     kernel_dir = os.path.join(".", "kernels", "sources")
 
     if arch not in kImage:

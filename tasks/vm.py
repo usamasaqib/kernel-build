@@ -2,15 +2,15 @@ import os
 import socket
 import netifaces
 import json
+import platform
 from invoke import task
 from glob import glob
 from invoke.exceptions import Exit
-from tasks.kernel import DEFAULT_ARCH, kImage, build as kbuild
+from tasks.kernel import arch_mapping, kImage, build as kbuild
 from tasks.rootfs import build as rootfs_build
 
 IP_ADDR = "169.254.0.%s"
 GUEST_ADDR = "169.254.0.%s"
-
 
 def tap_interface_name():
     interfaces = netifaces.interfaces()
@@ -113,7 +113,10 @@ def add_gdb_script(ctx, kernel_version, port):
 
 
 @task
-def init(ctx, kernel_version, arch=DEFAULT_ARCH):
+def init(ctx, kernel_version, arch=None):
+    if arch is None:
+        arch = arch_mapping[platform.machine()]
+
     kernel_dir = os.path.join(".", "kernels", "sources", f"kernel-{kernel_version}")
 
     if arch not in kImage:
