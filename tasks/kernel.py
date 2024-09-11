@@ -15,15 +15,12 @@ from tasks.compiler import get_compiler, CONTAINER_LINUX_SRC_PATH
 
 
 class KernelVersion:
-    def __init__(self, major: int, minor: int, patch: int = -1):
+    def __init__(self, major: int, minor: int, patch: int):
         self.major = major 
         self.minor = minor
         self.patch = patch
 
     def __str__(self) -> str:
-        if self.patch == -1:
-            return f"v{self.major}.{self.minor}"
-
         return f"v{self.major}.{self.minor}.{self.patch}"
 
     def __eq__(self, other: KernelVersion) -> bool:
@@ -40,10 +37,8 @@ class KernelVersion:
             return True
         if self.major == other.major and self.minor < other.minor:
             return True
-        if self.patch != -1 and other.patch != -1:
-            return self.minor == other.minor and self.patch < other.patch
-
-        return False
+            
+        return self.minor == other.minor and self.patch < other.patch
 
     def __lte__(self, other: KernelVersion) -> bool:
         return self.__lt__(other) or self.__eq__(other)
@@ -51,16 +46,12 @@ class KernelVersion:
     def __gt__(self, other: KernelVersion) -> bool:
         return not self.__lte__(other)
 
-    @property
-    def has_patch(self) -> bool:
-        return self.patch != -1
-
 
     def _get_kernel_pkg_dir(self):
         return f"kernel-{self}"
 
     @staticmethod
-    def from_str(v: str) -> KernelVersion:
+    def from_str(ctx, v: str) -> KernelVersion:
         if v[0] == 'v':
             v = v[1:]
 
@@ -77,6 +68,9 @@ class KernelVersion:
                 patch = -1
         except ValueError as e:
             raise e
+
+        if patch == -1:
+            return KernelVersion(major, minor, discover_latest_patch(ctx, major, minor))
 
         return KernelVersion(major, minor, patch)
 
@@ -96,9 +90,9 @@ class BuildContext:
         _lockfile = BuildContext.lockfile
         if _lockfile.exists():
             with open(_lockfile, 'r') as lf:
-                kv = KernelVersion.from_str(lf.read().split('\n')[0])
+                kv = KernelVersion.from_str(None, lf.read().split('\n')[0])
                 if self.kernel_version != kv:
-                    raise Exit(f"a build context is already active for kernel {self.kernel_version}")
+                    raise Exit(f"a build context is already active for kernel {kv}")
         else:
             with open(_lockfile, 'w') as lf:
                 lf.write(str(self.kernel_version))
@@ -114,12 +108,20 @@ class BuildContext:
         _lockfile = BuildContext.lockfile
         if _lockfile.exists():
             with open(_lockfile, 'r') as lf:
-                kv = KernelVersion.from_str(lf.read().split('\n')[0])
+                kv = KernelVersion.from_str(None, lf.read().split('\n')[0])
                 return BuildContext(kv)
 
         raise Exit("No active build context")
 
-def checkout_kernel(ctx, kernel_version, pull=False) -> KernelVersion:
+def discover_latest_patch(ctx, major: int, minor: int) -> int:
+    tag_res = ctx.run(
+        f"cd {KernelBuildPaths.linux_stable} && git tag | grep 'v{major}.{minor}.*$' | sort -V | tail -1", hide=True,
+    )
+    tag = tag_res.stdout.split()[0]
+    return KernelVersion.from_str(None, tag).patch
+
+
+def checkout_kernel(ctx, kernel_version, pull=False):
     if not KernelBuildPaths.linux_stable.exists():
         KernelBuildPaths.linux_stable.mkdir(exist_ok=True)
         ctx.run(
@@ -129,18 +131,8 @@ def checkout_kernel(ctx, kernel_version, pull=False) -> KernelVersion:
     if pull:
         ctx.run(f"cd {KernelBuildPaths.linux_stable} && git pull")
 
-    tag = str(kernel_version)
-    if not kernel_version.has_patch:
-        tag_res = ctx.run(
-            f"cd {KernelBuildPaths.linux_stable} && git tag | grep '{kernel_version}.*$' | sort -V | tail -1"
-        )
-        tag = tag_res.stdout.split()[0]
-        kernel_version = KernelVersion.from_str(tag)
-
-    info(f"[+] Checking out tag {tag}")
-    ctx.run(f"cd {KernelBuildPaths.linux_stable} && git checkout {tag}")
-
-    return kernel_version
+    info(f"[+] Checking out tag {kernel_version}")
+    ctx.run(f"cd {KernelBuildPaths.linux_stable} && git checkout {kernel_version}")
 
 def make_config(ctx, extra_config: PathOrStr):
     dot_config = KernelBuildPaths.linux_stable / ".config"
@@ -153,12 +145,15 @@ def make_config(ctx, extra_config: PathOrStr):
     ctx.run(f"make -C {build_path} olddefconfig")
 
 
-def make_kernel(run, source_dir):
-    run(f"make -C {source_dir} -j$(nproc) deb-pkg KCFLAGS=-ggdb3")
+def make_kernel(run, sources_dir: str, compile_only: bool):
+    if compile_only:
+        run(f"make -C {sources_dir} -j$(nproc) bzImage KCFLAGS=-ggdb3")
+    else:
+        run(f"make -C {sources_dir} -j$(nproc) deb-pkg KCFLAGS=-ggdb3")
 
 @task
 def checkout(ctx, kernel_version: str):
-    _ = checkout_kernel(ctx, KernelVersion.from_str(kernel_version))
+    checkout_kernel(ctx, KernelVersion.from_str(ctx, kernel_version))
 
 
 def get_kernel_pkg_dir(version: KernelVersion) -> Path:
@@ -173,8 +168,7 @@ def get_kernel_image_name(arch: KbuildArchOrLocal) -> str:
     raise Exit("unexpect architecture {arch}")
 
 @task
-def build_package(ctx, version: KernelVersion, arch_obj: KbuildArchOrLocal):
-    sources_dir = os.path.join(".", "kernels", "sources")
+def build_package(ctx, version: KernelVersion, arch: KbuildArchOrLocal):
     deb_files = glob(f"{KernelBuildPaths.kernel_sources_dir}/*.deb")
 
     kdir = get_kernel_pkg_dir(version)
@@ -183,9 +177,8 @@ def build_package(ctx, version: KernelVersion, arch_obj: KbuildArchOrLocal):
     for pkg in deb_files:
         ctx.run(f"mv {pkg} {kdir}")
 
-    arch = arch_obj.kernel_arch
     ctx.run(f"mv {KernelBuildPaths.linux_stable}/vmlinux {kdir}")
-    ctx.run(f"mv {KernelBuildPaths.linux_stable}/arch/{arch}/boot/{get_kernel_image_name(arch)} {kdir}")
+    ctx.run(f"mv {KernelBuildPaths.linux_stable}/arch/{arch.kernel_arch}/boot/{get_kernel_image_name(arch)} {kdir}")
 
     linux_source_dir = kdir / "linux-source"
     ctx.run(f"rm -rf {linux_source_dir}")
@@ -193,10 +186,11 @@ def build_package(ctx, version: KernelVersion, arch_obj: KbuildArchOrLocal):
 
     upstream = glob("./**/linux-*", recursive=True)
     found = False
+    karch = arch.kernel_arch
     for f in upstream:
-        if arch == "x86" and "upstream" in f and "orig.tar.gz" in f:
+        if karch == "x86" and "upstream" in f and "orig.tar.gz" in f:
             ctx.run(f"mv {f} {kdir}/linux.tar.gz")
-        elif arch == "arm64" and "orig.tar.gz" in f:
+        elif karch == "arm64" and "orig.tar.gz" in f:
             ctx.run(f"mv {f} {kdir}/linux.tar.gz")
         else:
             continue
@@ -219,15 +213,33 @@ def kuuid(ctx, kernel_version):
 
 EXTRA_CONFIG = "./kernels/configs/extra.config"
 
-@task
+@task(
+    help={
+        "kernel_version": "kernel version string of the form v6.8 or v5.2.20",
+        "arch": "architecture of the form x86 or aarch64, etc.",
+        "extra_config": "path to file containing extra KConfig options",
+        "compile_only": "only rebuild bzImage",
+        "always_use_gcc8": "always compile in docker container with gcc-8",
+    }
+)
 def build(
     ctx,
     kernel_version: str,
-    skip_patch: bool = True,
     arch: KbuildArchOrLocal | None = None,
     extra_config: PathOrStr | None = EXTRA_CONFIG,
+    compile_only: bool = False,
+    always_use_gcc8: bool = False,
 ):
-    kversion = KernelVersion.from_str(kernel_version)
+    build_kernel(ctx, KernelVersion.from_str(kernel_version), arch=arch, extra_config=extra_config, compile_only=compile_only)
+
+def build_kernel(
+    ctx,
+    kversion: KernelVersion,
+    arch: KbuildArchOrLocal | None = None,
+    extra_config: PathOrStr | None = EXTRA_CONFIG,
+    compile_only: bool = False,
+    always_use_gcc8: bool = False,
+):
 
     if arch is None:
         arch = Arch.local()
@@ -235,12 +247,12 @@ def build(
         arch = Arch.from_str(arch)
 
     use_gcc8 = False
-    if kversion < KernelVersion(5,5):
+    if kversion < KernelVersion(5,5,0):
         use_gcc8 = True
     
     run_cmd = ctx.run
     source_dir = KernelBuildPaths.linux_stable
-    if use_gcc8:
+    if use_gcc8 || always_use_gcc8:
         cc = get_compiler(ctx, KernelBuildPaths.linux_stable)
         run_cmd = cc.exec
         source_dir = CONTAINER_LINUX_SRC_PATH
@@ -249,25 +261,35 @@ def build(
 
     context.acquire()
 
-    kversion = checkout_kernel(ctx, kversion)
+    checkout_kernel(ctx, kversion)
     make_config(ctx, extra_config)
-    make_kernel(run_cmd, source_dir)
-    build_package(ctx, kernel_version, arch)
-    kuuid(ctx, kernel_version)
+    make_kernel(run_cmd, source_dir, compile_only)
+    build_package(ctx, kversion, arch)
+    kuuid(ctx, kversion)
+
+    info("[+] Kernel {kernel_version} build complete")
 
 
 @task
 def clean(ctx, kernel_version: str | None = None):
     if kernel_version is None:
         context = BuildContext.from_current()
+        kversion = context.kernel_version
     else:
-        kversion = KernelVersion.from_str(kernel_version)
+        kversion = KernelVersion.from_str(ctx, kernel_version)
         context = BuildContext(kversion)
 
     ctx.run(f"make -C {KernelBuildPaths.linux_stable} clean")
+    ctx.run(f"make -C {KernelBuildPaths.linux_stable}/tools clean")
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && git checkout master")
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && rm .config", warn=True)
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && rm -r debian", warn=True)
     ctx.run(f"cd {KernelBuildPaths.kernel_sources_dir} && rm *", warn=True)
-    ctx.run("rm -f {KernelBuildPaths.linux_stable}/vmlinux-gdb.py")
-    ctx.run("rm -f {KernelBuildPaths.linux_stable}/linux.tar.gz")
+    ctx.run(f"rm -f {KernelBuildPaths.linux_stable}/vmlinux-gdb.py")
+    ctx.run(f"rm -f {KernelBuildPaths.linux_stable}/linux.tar.gz")
+
+    if kversion < KernelVersion(5,5,0):
+        cc = get_compiler(ctx, KernelBuildPaths.linux_stable)
+        cc.exec("rm -f /tmp/*")
+
+    context.release()

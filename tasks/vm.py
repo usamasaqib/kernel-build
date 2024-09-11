@@ -7,7 +7,7 @@ from invoke import task
 from glob import glob
 from invoke.exceptions import Exit
 from tasks.arch import Arch
-from tasks.kernel import build as kbuild, get_kernel_pkg_dir, get_kernel_image_name, KernelBuildPaths
+from tasks.kernel import build_kernel , get_kernel_pkg_dir, get_kernel_image_name, KernelBuildPaths, KernelVersion
 from tasks.rootfs import build as rootfs_build
 from tasks.tool import warn, Exit
 
@@ -24,10 +24,8 @@ def tap_interface_name():
         return name
 
 
-def setup_tap_interface(ctx, kernel_version):
-    manifest_file = os.path.join(
-        ".", "kernels", "sources", get_kernel_pkg_dir(kernel_version), "kernel.manifest"
-    )
+def setup_tap_interface(ctx, kernel_version: KernelVersion):
+    manifest_file = get_kernel_pkg_dir(kernel_version) / "kernel.manifest"
     with open(manifest_file, "r") as f:
         manifest = json.load(f)
 
@@ -66,8 +64,8 @@ def setup_tap_interface(ctx, kernel_version):
     return tap_name
 
 
-def setup_kernel_package(ctx, kernel_version, arch):
-    kbuild(ctx, kernel_version=kernel_version, arch=arch)
+def setup_kernel_package(ctx, kernel_version, arch, compile_only, always_use_gcc8):
+    build_kernel(ctx, kversion=kernel_version, arch=arch, compile_only=compile_only, always_use_gcc8=always_use_gcc8)
     rootfs_build(ctx, kernel_version)
 
 
@@ -114,18 +112,30 @@ def add_gdb_script(ctx, kernel_version, port):
     ctx.run(f"chmod +x {gdb_script}")
 
 
-@task
-def init(ctx, kernel_version, arch=None):
+@task(
+    help={
+        "kernel_version": "kernel version string of the form v6.8 or v5.2.20",
+        "arch": "architecture of the form x86 or aarch64, etc.",
+        "compile_only": "only rebuild bzImage",
+    }
+)
+def init(
+    ctx, 
+    kernel_version: str, 
+    arch: str | None = None, 
+    compile_only: bool = False
+    always_use_gcc8: bool = False
+):
     if arch is None:
         arch = Arch.local()
     else:
         arch = Arch.from_str(arch)
 
-    kversion = KernelVersion.from_str(kernel_version)
+    kversion = KernelVersion.from_str(ctx, kernel_version)
     pkg_dir = get_kernel_pkg_dir(kversion)
 
     if not pkg_dir.exists():
-        setup_kernel_package(ctx, kernel_version, arch)
+        setup_kernel_package(ctx, kversion, arch, compile_only, always_use_gcc8)
 
     with open(pkg_dir / "kernel.manifest", "r") as f:
         manifest = json.load(f)
@@ -140,7 +150,7 @@ def init(ctx, kernel_version, arch=None):
     scripts_dir = os.path.join(".", "scripts")
     qemu_script = os.path.abspath(os.path.join(scripts_dir, "qemu-launch.sh"))
 
-    tap = setup_tap_interface(ctx, kernel_version)
+    tap = setup_tap_interface(ctx, kversion)
 
     kabspath = os.path.abspath(kernel_dir)
     kimage = get_kernel_image_name(arch)
@@ -156,7 +166,7 @@ def init(ctx, kernel_version, arch=None):
 
     ctx.run(f"rm -f {KernelBuildPaths.kernel_sources_dir}/linux-*", warn=True)
 
-    add_gdb_script(ctx, kernel_version, port)
+    add_gdb_script(ctx, kversion, port)
 
 
 @task

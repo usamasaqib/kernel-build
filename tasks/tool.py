@@ -6,10 +6,6 @@ import sys
 import invoke.exceptions as ie
 from termcolor import colored
 
-def colored(text: str, color: str | None) -> str:  # noqa: U100
-    return text
-
-
 def _logprint(msg: str):
     print(msg, flush=True, file=sys.stderr)
 
