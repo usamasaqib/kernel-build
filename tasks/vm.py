@@ -6,8 +6,10 @@ import platform
 from invoke import task
 from glob import glob
 from invoke.exceptions import Exit
-from tasks.kernel import arch_mapping, kImage, build as kbuild
+from tasks.arch import Arch
+from tasks.kernel import build as kbuild, get_kernel_pkg_dir, get_kernel_image_name, KernelBuildPaths
 from tasks.rootfs import build as rootfs_build
+from tasks.tool import warn, Exit
 
 IP_ADDR = "169.254.0.%s"
 GUEST_ADDR = "169.254.0.%s"
@@ -24,7 +26,7 @@ def tap_interface_name():
 
 def setup_tap_interface(ctx, kernel_version):
     manifest_file = os.path.join(
-        ".", "kernels", "sources", f"kernel-{kernel_version}", "kernel.manifest"
+        ".", "kernels", "sources", get_kernel_pkg_dir(kernel_version), "kernel.manifest"
     )
     with open(manifest_file, "r") as f:
         manifest = json.load(f)
@@ -90,22 +92,22 @@ def find_free_gdb_port():
 
 
 def add_gdb_script(ctx, kernel_version, port):
-    kdir = os.path.join(".", "kernels", "sources", f"kernel-{kernel_version}")
+    kdir = get_kernel_pkg_dir(kernel_version)
     if not os.path.exists(kdir):
-        raise Exit(f"Kernel directory 'kernel-{kernel_version}' not present")
+        raise Exit(f"Kernel directory '{kdir}' not present")
 
-    cfg = os.path.join(".", "kernels", "sources", "linux-stable", ".config")
+    cfg = KernelBuildPaths.linux_stable / ".config"
     ctx.run(f"cp {cfg} {kdir}/linux-source")
     ctx.run(f"cd {kdir}/linux-source && make scripts_gdb")
 
-    dbg_img = os.path.abspath(os.path.join(kdir, "vmlinux"))
-    src_dir = os.path.abspath(os.path.join(kdir, "linux-source"))
-    vmlinux_gdb = os.path.abspath(os.path.join(src_dir, "vmlinux-gdb.py"))
+    dbg_img = kdir.absolute() / "vmlinux"
+    src_dir = kdir.absolute() / "linux-source"
+    vmlinux_gdb = src_dir.absolute() / "vmlinux_gdb.py"
 
-    gdb_script = os.path.join(kdir, "gdb.sh")
+    gdb_script = kdir / "gdb.sh"
     with open(gdb_script, "w") as f:
         f.write("#!/bin/bash\n")
-        f.write(f'gdb -ex "add-auto-load-safe-path {src_dir}" -ex "file {dbg_img}" -ex "set arch i386:x86-64:intel" \
+        f.write(f'gdb -ex "add-auto-load-safe-path {src_dir}" -ex "file {}" -ex "set arch i386:x86-64:intel" \
                 -ex "target remote localhost:{port}" -ex "source {vmlinux_gdb}" -ex "set disassembly-flavor inter" \
                 -ex "set pagination off"\n')
 
@@ -115,17 +117,17 @@ def add_gdb_script(ctx, kernel_version, port):
 @task
 def init(ctx, kernel_version, arch=None):
     if arch is None:
-        arch = arch_mapping[platform.machine()]
+        arch = Arch.local()
+    else:
+        arch = Arch.from_str(arch)
 
-    kernel_dir = os.path.join(".", "kernels", "sources", f"kernel-{kernel_version}")
+    kversion = KernelVersion.from_str(kernel_version)
+    pkg_dir = get_kernel_pkg_dir(kversion)
 
-    if arch not in kImage:
-        raise Exit(f"Invalid arch {arch}")
-
-    if not os.path.exists(kernel_dir):
+    if not pkg_dir.exists():
         setup_kernel_package(ctx, kernel_version, arch)
 
-    with open(os.path.join(kernel_dir, "kernel.manifest"), "r") as f:
+    with open(pkg_dir / "kernel.manifest", "r") as f:
         manifest = json.load(f)
 
     if "gdb_port" not in manifest:
@@ -141,35 +143,20 @@ def init(ctx, kernel_version, arch=None):
     tap = setup_tap_interface(ctx, kernel_version)
 
     kabspath = os.path.abspath(kernel_dir)
+    kimage = get_kernel_image_name(arch)
     ctx.run(
-        f"echo 'sudo {qemu_script} {kabspath}/rootfs.qcow2 {kabspath}/{kImage[arch]} {tap} {port}' > {kernel_dir}/run.sh"
+        f"echo 'sudo {qemu_script} {pkg_dir.absolute()}/rootfs.qcow2 {pkg_dir.absolute}/{kimage} {tap} {port}' > {pkg_dir}/run.sh"
     )
-    ctx.run(f"chmod +x {kabspath}/run.sh")
+    ctx.run(f"chmod +x {pkg_dir.absolute()}/run.sh")
 
     manifest["tap_name"] = tap
     manifest["gdb_port"] = port
-    with open(os.path.join(kernel_dir, "kernel.manifest"), "w") as f:
+    with open(pkg_dir / "kernel.manifest", "w") as f:
         json.dump(manifest, f)
 
-    kernel_source = os.path.join(".", "kernels", "sources")
-    ctx.run(f"rm -f {kernel_source}/linux-*", warn=True)
+    ctx.run(f"rm -f {KernelBuildPaths.kernel_sources_dir}/linux-*", warn=True)
 
     add_gdb_script(ctx, kernel_version, port)
-
-
-# @task
-# def run(ctx, count=1):
-#   password = getpass("password: ")
-#   vms_dir = os.path.join(".", "vms")
-#   for i in range(0, count):
-#       vm_num = 1000 + i
-#       vm_dir = os.path.join(vms_dir, f"vm-{vm_num}")
-#       img = os.path.join(vm_dir, "rootfs.img")
-#       kernel = os.path.join(vm_dir, "bzImage")
-#       launch = os.path.join(vm_dir, "qemu-launch.sh")
-#
-#       ctx.sudo(f"{launch} {img} {kernel} qemu_tap-{vm_num}", password=password, disown=True)
-#       ctx.run(f"cat {vm_dir}/ssh_cmd")
 
 
 @task
@@ -182,8 +169,8 @@ def cleanup_taps(ctx):
 
 @task
 def clean(ctx, kernel_version, all_vms=False):
-    kernel_dir = os.path.join(".", "kernels", "sources", f"kernel-{kernel_version}")
-    manifest_file = os.path.join(kernel_dir, "kernel.manifest")
+    kernel_dir = get_kernel_pkg_dir(kernel_version)
+    manifest_file = get_kernel_pkg_dir(kernel_version) / "kernel.manifest"
     with open(manifest_file, "r") as f:
         manifest = json.load(f)
 
@@ -192,22 +179,3 @@ def clean(ctx, kernel_version, all_vms=False):
         ctx.run(f"sudo ip link del {name}", warn=True)
 
     ctx.run(f"rm -rf {kernel_dir}")
-
-
-# @task
-# def shutdown(ctx, count=1):
-#    vms_dir = os.path.join(".", "vms")
-#    for i in range(0, count):
-#        vm_num = 1000 + i
-#        vm_dir = os.path.join(vms_dir, f"vm-{vm_num}")
-#        res = ctx.run(f"cat {vm_dir}/ssh_cmd").stdout.split('\n')[0]
-#        shutdown = f"{res} reboot"
-#        ctx.run(shutdown)
-#        time.sleep(0.5)
-#
-#        pid = ctx.run(f"cat {vm_dir}/vm.pid").stdout.split('\n')[0]
-#        print(f"vm pid: {pid}")
-#
-#        if psutil.pid_exists(pid):
-#            print(f"Could not shutdown pid: {pid}")
-#            raise UnexpectedExit()
