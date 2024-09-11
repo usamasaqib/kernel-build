@@ -123,8 +123,8 @@ def init(
     ctx, 
     kernel_version: str, 
     arch: str | None = None, 
-    compile_only: bool = False
-    always_use_gcc8: bool = False
+    compile_only: bool = False,
+    always_use_gcc8: bool = False,
 ):
     if arch is None:
         arch = Arch.local()

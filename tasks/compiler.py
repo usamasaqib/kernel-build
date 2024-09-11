@@ -7,7 +7,7 @@ from invoke.context import Context
 from tasks.arch import ARCH_AMD64, ARCH_ARM64, Arch
 from tasks.tool import info, warn, Exit
 
-CONTAINER_LINUX_SRC_PATH = "/tmp/linux-stable"
+CONTAINER_LINUX_BUILD_PATH = Path("/tmp/build")
 
 class CompilerImage:
     def __init__(self, ctx: Context, arch: Arch, mountpoint: PathOrStr):
@@ -82,7 +82,7 @@ class CompilerImage:
 
         res = self.ctx.run(
             f"docker run -d --restart always --name {self.name} "
-            f"--mount type=bind,source={self.mountpoint.absolute()},target={CONTAINER_LINUX_SRC_PATH} "
+            f"--mount type=bind,source={self.mountpoint.absolute()},target={CONTAINER_LINUX_BUILD_PATH} "
             f"{self.image} sleep \"infinity\"",
         )
 
@@ -102,7 +102,7 @@ class CompilerImage:
 
         if sys.platform != "darwin":  # No need to change permissions in MacOS
             self.exec(
-                f"chown {uid}:{gid} {CONTAINER_LINUX_SRC_PATH} && chown -R {uid}:{gid} {CONTAINER_LINUX_SRC_PATH}", user="root"
+                f"chown {uid}:{gid} {CONTAINER_LINUX_BUILD_PATH} && chown -R {uid}:{gid} {CONTAINER_LINUX_BUILD_PATH}", user="root"
             )
 
         self.exec("apt install sudo", user="root")

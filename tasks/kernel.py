@@ -10,7 +10,7 @@ from pathlib import Path
 
 from tasks.arch import Arch
 from tasks.tool import info, Exit
-from tasks.compiler import get_compiler, CONTAINER_LINUX_SRC_PATH
+from tasks.compiler import get_compiler, CONTAINER_LINUX_BUILD_PATH
 
 
 class KernelVersion:
@@ -76,7 +76,8 @@ class KernelVersion:
 class KernelBuildPaths:
     kernel_dir = Path(f"./kernels")
     kernel_sources_dir = kernel_dir / "sources"
-    linux_stable = kernel_sources_dir / "linux-stable"
+    build_dir = kernel_sources_dir / "build"
+    linux_stable = build_dir  / "linux-stable"
     patch_dir = kernel_dir / "patches"
     configs_dir = kernel_dir / "configs"
 
@@ -112,7 +113,16 @@ class BuildContext:
 
         raise Exit("No active build context")
 
+
+def clone_kernel_source(ctx):
+    KernelBuildPaths.linux_stable.mkdir(parents=True)
+    ctx.run(
+        f"git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git {KernelBuildPaths.linux_stable}"
+    )
+
 def discover_latest_patch(ctx, major: int, minor: int) -> int:
+    if not KernelBuildPaths.linux_stable.exists():
+        clone_kernel_source(ctx)
     tag_res = ctx.run(
         f"cd {KernelBuildPaths.linux_stable} && git tag | grep 'v{major}.{minor}.*$' | sort -V | tail -1", hide=True,
     )
@@ -122,10 +132,7 @@ def discover_latest_patch(ctx, major: int, minor: int) -> int:
 
 def checkout_kernel(ctx, kernel_version, pull=False):
     if not KernelBuildPaths.linux_stable.exists():
-        KernelBuildPaths.linux_stable.mkdir(exist_ok=True)
-        ctx.run(
-            f"git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git {KernelBuildPaths.linux_stable}"
-        )
+        clone_kernel_source(ctx)
 
     if pull:
         ctx.run(f"cd {KernelBuildPaths.linux_stable} && git pull")
@@ -134,12 +141,19 @@ def checkout_kernel(ctx, kernel_version, pull=False):
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && git checkout {kernel_version}")
 
 def make_config(ctx, extra_config: str):
+    if extra_config is None:
+        all_configs = EXTRA_CONFIG
+    else:
+        all_configs = set(extra_config + EXTRA_CONFIG)
+
     dot_config = KernelBuildPaths.linux_stable / ".config"
 
     build_path = str(KernelBuildPaths.linux_stable)
     ctx.run(f"make -C {build_path} defconfig")
     ctx.run(f"make -C {build_path} kvm_guest.config")
-    ctx.run(f"tee -a < {extra_config} {dot_config}")
+
+    for cfg in all_configs:
+        ctx.run(f"tee -a < {cfg} {dot_config}")
 
     ctx.run(f"make -C {build_path} olddefconfig")
 
@@ -187,14 +201,9 @@ def build_package(ctx, version: KernelVersion, arch: Arch):
     found = False
     karch = arch.kernel_arch
     for f in upstream:
-        if karch == "x86" and "upstream" in f and "orig.tar.gz" in f:
+        if "orig.tar.gz" in f:
             ctx.run(f"mv {f} {kdir}/linux.tar.gz")
-        elif karch == "arm64" and "orig.tar.gz" in f:
-            ctx.run(f"mv {f} {kdir}/linux.tar.gz")
-        else:
-            continue
-        
-        found = True
+            found = True
 
     if not found:
         raise Exit("unable to find source package")
@@ -210,7 +219,12 @@ def kuuid(ctx, kernel_version):
         json.dump(manifest, f)
 
 
-EXTRA_CONFIG = "./kernels/configs/extra.config"
+EXTRA_CONFIG = [
+    "./kernels/configs/bpf.config",
+    "./kernels/configs/virtio.config",
+    "./kernels/configs/trace.config",
+    "./kernels/configs/remove-drivers.config",
+]
 
 @task(
     help={
@@ -225,21 +239,20 @@ def build(
     ctx,
     kernel_version: str,
     arch: Arch | None = None,
-    extra_config: str | None = EXTRA_CONFIG,
+    extra_config: str | None = None,
     compile_only: bool = False,
     always_use_gcc8: bool = False,
 ):
-    build_kernel(ctx, KernelVersion.from_str(kernel_version), arch=arch, extra_config=extra_config, compile_only=compile_only)
+    build_kernel(ctx, KernelVersion.from_str(ctx, kernel_version), arch=arch, extra_config=extra_config, compile_only=compile_only)
 
 def build_kernel(
     ctx,
     kversion: KernelVersion,
+    extra_config: str | None = None,
     arch: Arch | None = None,
-    extra_config: str | None = EXTRA_CONFIG,
     compile_only: bool = False,
     always_use_gcc8: bool = False,
 ):
-
     if arch is None:
         arch = Arch.local()
     else:
@@ -251,10 +264,10 @@ def build_kernel(
     
     run_cmd = ctx.run
     source_dir = KernelBuildPaths.linux_stable
-    if use_gcc8 || always_use_gcc8:
-        cc = get_compiler(ctx, KernelBuildPaths.linux_stable)
+    if use_gcc8 or always_use_gcc8:
+        cc = get_compiler(ctx, KernelBuildPaths.build_dir)
         run_cmd = cc.exec
-        source_dir = CONTAINER_LINUX_SRC_PATH
+        source_dir = CONTAINER_LINUX_BUILD_PATH / "linux-stable"
 
     context = BuildContext(kversion)
 
