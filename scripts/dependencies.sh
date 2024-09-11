@@ -20,6 +20,7 @@ sudo apt install -y git \
     cmake \
     qemu-utils
 
+rm -rf /tmp/dwarves
 git -c http.sslVerify=false clone --recurse-submodules https://github.com/acmel/dwarves.git /tmp/dwarves
 cd /tmp/dwarves
 git config http.sslVerify "false"
