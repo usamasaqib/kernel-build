@@ -1,13 +1,17 @@
+from __future__ import annotations
+
 from glob import glob
 import os
 from invoke import task
 import uuid
 import json
 import platform
+from pathlib import Path
 
 from tasks.arch import Arch
 from tasks.types import KbuildArchOrLocal, PathOrStr
-from tasks.tool import warn, Exit
+from tasks.tool import info, Exit
+from tasks.compiler import get_compiler, CONTAINER_LINUX_SRC_PATH
 
 
 class KernelVersion:
@@ -28,18 +32,36 @@ class KernelVersion:
         
         raise NotImplemented
 
+    def __lt__(self, other: KernelVersion) -> bool:
+        if not isinstance(other, KernelVersion):
+            raise NotImplemented
+
+        if self.major < other.major:
+            return True
+        if self.major == other.major and self.minor < other.minor:
+            return True
+        if self.patch != -1 and other.patch != -1:
+            return self.minor == other.minor and self.patch < other.patch
+
+        return False
+
+    def __lte__(self, other: KernelVersion) -> bool:
+        return self.__lt__(other) or self.__eq__(other)
+
+    def __gt__(self, other: KernelVersion) -> bool:
+        return not self.__lte__(other)
+
+    @property
     def has_patch(self) -> bool:
         return self.patch != -1
 
-    def major_minor_str(self) -> str:
-        return f"v{major}.{minor}"
 
     def _get_kernel_pkg_dir(self):
         return f"kernel-{self}"
 
     @staticmethod
     def from_str(v: str) -> KernelVersion:
-        if v[0] = 'v':
+        if v[0] == 'v':
             v = v[1:]
 
         broken = v.split('.')
@@ -52,9 +74,9 @@ class KernelVersion:
             if len(broken) == 3:
                 patch = int(broken[2])
             else:
-                patch = 0
-        except ValueError:
-            raise Exit("Invalid kernel version string {v}")
+                patch = -1
+        except ValueError as e:
+            raise e
 
         return KernelVersion(major, minor, patch)
 
@@ -71,42 +93,46 @@ class BuildContext:
         self.kernel_version = kernel_version
 
     def acquire(self):
-        if lockfile.exists():
-            with open(str(lockfile), 'r') as lf:
-                kv = KernelVersion(lf.read().split("\n")[0])
+        _lockfile = BuildContext.lockfile
+        if _lockfile.exists():
+            with open(_lockfile, 'r') as lf:
+                kv = KernelVersion.from_str(lf.read().split('\n')[0])
                 if self.kernel_version != kv:
                     raise Exit(f"a build context is already active for kernel {self.kernel_version}")
         else:
-            with open(str(lockfile), 'w') as lf:
+            with open(_lockfile, 'w') as lf:
                 lf.write(str(self.kernel_version))
 
     def release(self):
         try:
-            lockfile.unlink()
+            BuildContext.lockfile.unlink()
         except Exception as e:
-            raise Exit("no active build context found {e}")
+            raise e
 
     @staticmethod
     def from_current() -> BuildContext:
-        if lockfile.exists():
-            with open(str(lockfile), 'r'): lf:
-                kv = KernelVersion(lf.read().split('\n')[0])
+        _lockfile = BuildContext.lockfile
+        if _lockfile.exists():
+            with open(_lockfile, 'r') as lf:
+                kv = KernelVersion.from_str(lf.read().split('\n')[0])
                 return BuildContext(kv)
 
         raise Exit("No active build context")
 
 def checkout_kernel(ctx, kernel_version, pull=False) -> KernelVersion:
-    KernelBuildPaths.linux_stable.mkdir(exit_ok=True)
-    ctx.run(
-        f"git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git {KernelBuildPaths.linux_stable}"
-    )
+    if not KernelBuildPaths.linux_stable.exists():
+        KernelBuildPaths.linux_stable.mkdir(exist_ok=True)
+        ctx.run(
+            f"git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git {KernelBuildPaths.linux_stable}"
+        )
 
     if pull:
         ctx.run(f"cd {KernelBuildPaths.linux_stable} && git pull")
 
+    tag = str(kernel_version)
     if not kernel_version.has_patch:
         tag_res = ctx.run(
-            f"cd {KernelBuildPaths.linux_stable} && git tag | grep 'v{kernel_version}.*$' | sort -V | tail -1"
+            f"cd {KernelBuildPaths.linux_stable} && git tag | grep '{kernel_version}.*$' | sort -V | tail -1"
         )
         tag = tag_res.stdout.split()[0]
         kernel_version = KernelVersion.from_str(tag)
@@ -127,8 +153,8 @@ def make_config(ctx, extra_config: PathOrStr):
     ctx.run(f"make -C {build_path} olddefconfig")
 
 
-def make_kernel(run):
-    run(f"make -C {KernelBuildPaths.linux_stable} -j$(nproc) deb-pkg KCFLAGS=-ggdb3")
+def make_kernel(run, source_dir):
+    run(f"make -C {source_dir} -j$(nproc) deb-pkg KCFLAGS=-ggdb3")
 
 @task
 def checkout(ctx, kernel_version: str):
@@ -200,34 +226,43 @@ def build(
     skip_patch: bool = True,
     arch: KbuildArchOrLocal | None = None,
     extra_config: PathOrStr | None = EXTRA_CONFIG,
-    use_gcc8: bool = False
 ):
+    kversion = KernelVersion.from_str(kernel_version)
+
     if arch is None:
         arch = Arch.local()
     else:
         arch = Arch.from_str(arch)
+
+    use_gcc8 = False
+    if kversion < KernelVersion(5,5):
+        use_gcc8 = True
     
     run_cmd = ctx.run
+    source_dir = KernelBuildPaths.linux_stable
     if use_gcc8:
-        cc = get_compiler(ctx)
-        run_cmd = lambda x: cc.exec("cd {CONTAINER_LINUX_SRC_PATH} && {x}")
+        cc = get_compiler(ctx, KernelBuildPaths.linux_stable)
+        run_cmd = cc.exec
+        source_dir = CONTAINER_LINUX_SRC_PATH
 
-    kversion = KernelVersion.from_str(kernel_version)
     context = BuildContext(kversion)
 
     context.acquire()
 
     kversion = checkout_kernel(ctx, kversion)
     make_config(ctx, extra_config)
-    make_kernel(run_cmd)
+    make_kernel(run_cmd, source_dir)
     build_package(ctx, kernel_version, arch)
     kuuid(ctx, kernel_version)
 
 
 @task
-def clean(ctx, kernel_version):
-    kversion = KernelVersion.from_str(kernel_version)
-    context = BuildContext(kversion)
+def clean(ctx, kernel_version: str | None = None):
+    if kernel_version is None:
+        context = BuildContext.from_current()
+    else:
+        kversion = KernelVersion.from_str(kernel_version)
+        context = BuildContext(kversion)
 
     ctx.run(f"make -C {KernelBuildPaths.linux_stable} clean")
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && git checkout master")

@@ -107,7 +107,7 @@ def add_gdb_script(ctx, kernel_version, port):
     gdb_script = kdir / "gdb.sh"
     with open(gdb_script, "w") as f:
         f.write("#!/bin/bash\n")
-        f.write(f'gdb -ex "add-auto-load-safe-path {src_dir}" -ex "file {}" -ex "set arch i386:x86-64:intel" \
+        f.write(f'gdb -ex "add-auto-load-safe-path {src_dir}" -ex "file {dbg_img}" -ex "set arch i386:x86-64:intel" \
                 -ex "target remote localhost:{port}" -ex "source {vmlinux_gdb}" -ex "set disassembly-flavor inter" \
                 -ex "set pagination off"\n')
 

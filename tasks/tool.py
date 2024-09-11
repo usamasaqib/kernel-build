@@ -2,22 +2,12 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import TYPE_CHECKING
 
 import invoke.exceptions as ie
-from invoke.context import Context
+from termcolor import colored
 
-from tasks.libs.types.arch import Arch
-
-if TYPE_CHECKING:
-    from tasks.kernel_matrix_testing.types import KMTArchName, KMTArchNameOrLocal, PathOrStr
-
-try:
-    from termcolor import colored
-except ImportError:
-
-    def colored(text: str, color: str | None) -> str:  # noqa: U100
-        return text
+def colored(text: str, color: str | None) -> str:  # noqa: U100
+    return text
 
 
 def _logprint(msg: str):
