@@ -9,7 +9,6 @@ import platform
 from pathlib import Path
 
 from tasks.arch import Arch
-from tasks.types import KbuildArchOrLocal, PathOrStr
 from tasks.tool import info, Exit
 from tasks.compiler import get_compiler, CONTAINER_LINUX_SRC_PATH
 
@@ -134,7 +133,7 @@ def checkout_kernel(ctx, kernel_version, pull=False):
     info(f"[+] Checking out tag {kernel_version}")
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && git checkout {kernel_version}")
 
-def make_config(ctx, extra_config: PathOrStr):
+def make_config(ctx, extra_config: str):
     dot_config = KernelBuildPaths.linux_stable / ".config"
 
     build_path = str(KernelBuildPaths.linux_stable)
@@ -159,7 +158,7 @@ def checkout(ctx, kernel_version: str):
 def get_kernel_pkg_dir(version: KernelVersion) -> Path:
     return KernelBuildPaths.kernel_sources_dir / version._get_kernel_pkg_dir()
 
-def get_kernel_image_name(arch: KbuildArchOrLocal) -> str:
+def get_kernel_image_name(arch: Arch) -> str:
     if arch.kernel_arch == "x86":
         return "bzImage"
     if arch.kernel_arch == "arm64":
@@ -168,7 +167,7 @@ def get_kernel_image_name(arch: KbuildArchOrLocal) -> str:
     raise Exit("unexpect architecture {arch}")
 
 @task
-def build_package(ctx, version: KernelVersion, arch: KbuildArchOrLocal):
+def build_package(ctx, version: KernelVersion, arch: Arch):
     deb_files = glob(f"{KernelBuildPaths.kernel_sources_dir}/*.deb")
 
     kdir = get_kernel_pkg_dir(version)
@@ -225,8 +224,8 @@ EXTRA_CONFIG = "./kernels/configs/extra.config"
 def build(
     ctx,
     kernel_version: str,
-    arch: KbuildArchOrLocal | None = None,
-    extra_config: PathOrStr | None = EXTRA_CONFIG,
+    arch: Arch | None = None,
+    extra_config: str | None = EXTRA_CONFIG,
     compile_only: bool = False,
     always_use_gcc8: bool = False,
 ):
@@ -235,8 +234,8 @@ def build(
 def build_kernel(
     ctx,
     kversion: KernelVersion,
-    arch: KbuildArchOrLocal | None = None,
-    extra_config: PathOrStr | None = EXTRA_CONFIG,
+    arch: Arch | None = None,
+    extra_config: str | None = EXTRA_CONFIG,
     compile_only: bool = False,
     always_use_gcc8: bool = False,
 ):
