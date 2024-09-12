@@ -8,8 +8,6 @@ python3 -c 'import sys; v = sys.version_info; sys.exit(0) if v.major == 3 and v.
 
 # python3 should be installed
 ./scripts/install-venv
-. ./venv
-pip install -r requirements.txt
 
 sudo apt install -y git \
     debootstrap \
