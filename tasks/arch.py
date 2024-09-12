@@ -29,7 +29,7 @@ class Arch:
         name: str,
         gcc_arch: str,
         kernel_arch: str,
-        kbuild_arch: KMTArchName | None,
+        kbuild_arch: KbuildArchName | None,
         spellings: set[str],
     ):
         self.name = name  #: Unique name for this architecture within this file.
@@ -37,7 +37,7 @@ class Arch:
             spellings  #: All the possible names for this architecture. Will be used when parsing user input.
         )
         self.gcc_arch = gcc_arch  #: Architecture used for GCC
-        self._kbuild_arch: KbuildArchName | None = kbuild_arch  #: Architecture used for KMT, if supported by KMT
+        self._kbuild_arch: KbuildArchName | None = kbuild_arch  #: Architecture used for build, if supported
         self.kernel_arch = kernel_arch  #: Name for the architecture in the Linux kernel
 
     def gcc_compiler(self, platform: str = sys.platform) -> str:
@@ -62,11 +62,11 @@ class Arch:
 
         Useful to avoid constant None checks
         """
-        if self._kmt_arch is None:
+        if self._kbuild_arch is None:
             raise ValueError(f"Kernel build arch not defined for {self.name}")
         return self._kbuild_arch
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: Arch) -> bool: # type: ignore
         if not isinstance(other, Arch):
             return False
         return self.name == other.name
@@ -119,7 +119,7 @@ ARCH_AMD64 = Arch(
     name="amd64",
     gcc_arch="x86_64",
     kernel_arch="x86",
-    kbuild_arch="x86_64",
+    kbuild_arch="x86",
     spellings={"amd64", "x86_64", "x64", "x86-64"},
 )
 
