@@ -120,6 +120,11 @@ def clone_kernel_source(ctx):
         f"git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git {KernelBuildPaths.linux_stable}"
     )
 
+    # restart compiler if we had to clone the kernel sources again
+    cc = get_compiler(ctx, KernelBuildPaths.build_dir)
+    cc.stop()
+
+
 def discover_latest_patch(ctx, major: int, minor: int) -> int:
     if not KernelBuildPaths.linux_stable.exists():
         clone_kernel_source(ctx)
@@ -264,6 +269,10 @@ def build_kernel(
     if kversion < KernelVersion(5,5,0):
         use_gcc8 = True
     
+    context = BuildContext(kversion)
+    context.acquire()
+    checkout_kernel(ctx, kversion)
+
     run_cmd = ctx.run
     source_dir = KernelBuildPaths.linux_stable
     if use_gcc8 or always_use_gcc8:
@@ -271,11 +280,6 @@ def build_kernel(
         run_cmd = cc.exec
         source_dir = CONTAINER_LINUX_BUILD_PATH / "linux-stable"
 
-    context = BuildContext(kversion)
-
-    context.acquire()
-
-    checkout_kernel(ctx, kversion)
     make_config(ctx, extra_config)
     make_kernel(run_cmd, source_dir, compile_only)
     build_package(ctx, kversion, arch)
