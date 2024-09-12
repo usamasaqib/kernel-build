@@ -21,6 +21,4 @@ ignore_missing_imports = true
 disallow_untyped_defs = false
 # Include column numbers in errors.
 show_column_numbers = true
-files = ['tasks/kernel.py']
-disable_error_code = [
-]
+files = ['tasks/']
