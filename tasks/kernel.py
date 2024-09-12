@@ -308,6 +308,7 @@ def clean(ctx, kernel_version: str | None = None):
 
     if kversion < KernelVersion(5,5,0):
         cc = get_compiler(ctx, KernelBuildPaths.linux_stable)
-        cc.exec("rm -f /tmp/*")
+        cc.exec("rm -f /tmp/*", allow_fail=True)
 
+    info("[+] Releasing build context for kernel {kversion}")
     context.release()
