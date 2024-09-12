@@ -1,0 +1,4 @@
+#!/bin/bash
+
+add-apt-repository -y 'ppa:deadsnakes/ppa'
+apt install -y python3-venv

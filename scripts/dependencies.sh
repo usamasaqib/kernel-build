@@ -7,7 +7,9 @@ python3 -c 'import sys; v = sys.version_info; sys.exit(0) if v.major == 3 and v.
 ./scripts/setup-kernel-deps.sh
 
 # python3 should be installed
-pip3 install invoke netifaces
+./scripts/install-venv
+. ./venv
+pip install -r requirements.txt
 
 sudo apt install -y git \
     debootstrap \
