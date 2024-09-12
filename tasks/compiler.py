@@ -31,7 +31,7 @@ class CompilerImage:
 
     @property
     def docker_cmd(self):
-        with open("/etc/groups", 'r') as f:
+        with open("/etc/group", 'r') as f:
             groups = f.read().split()
         for group in groups:
             if group.split(':')[0] == "docker":
