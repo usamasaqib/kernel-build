@@ -9,7 +9,7 @@ from invoke.context import Context
 from tasks.arch import Arch
 from tasks.tool import info, warn
 
-CONTAINER_LINUX_BUILD_PATH = Path("/tmp/build")
+CONTAINER_LINUX_BUILD_PATH = Path("/tmp/sources")
 
 
 class CompilerExec(Protocol):

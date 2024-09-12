@@ -12,10 +12,12 @@ from tasks.kernel import (
     get_kernel_image_name,
     KernelBuildPaths,
     KernelVersion,
+    requires_gcc8,
 )
 from tasks.rootfs import rootfs_build
 from tasks.tool import Exit
 from invoke.context import Context as InvokeContext
+from tasks.compiler import get_compiler, CONTAINER_LINUX_BUILD_PATH
 
 from typing import Optional
 
@@ -121,7 +123,15 @@ def add_gdb_script(
 
     cfg = KernelBuildPaths.linux_stable / ".config"
     ctx.run(f"cp {cfg} {kdir}/linux-source")
-    ctx.run(f"cd {kdir}/linux-source && make scripts_gdb")
+
+    run_cmd = ctx.run
+    source_dir = KernelBuildPaths.linux_stable
+    if requires_gcc8(kernel_version):
+        cc = get_compiler(ctx, KernelBuildPaths.kernel_sources_dir)
+        run_cmd = cc.exec
+        source_dir = CONTAINER_LINUX_BUILD_PATH / "linux-stable"
+
+    run_cmd(f"cd {source_dir}/linux-source && make scripts_gdb")
 
     dbg_img = kdir.absolute() / "vmlinux"
     src_dir = kdir.absolute() / "linux-source"
@@ -188,7 +198,7 @@ def init(
     with open(pkg_dir / "kernel.manifest", "w") as f:
         json.dump(manifest, f)
 
-    ctx.run(f"rm -f {KernelBuildPaths.build_dir}/linux-*", warn=True)
+    ctx.run(f"rm -f {KernelBuildPaths.kernel_sources_dir}/linux-*", warn=True)
 
     add_gdb_script(ctx, kversion, port)
 

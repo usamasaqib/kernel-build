@@ -89,8 +89,7 @@ class KernelVersion:
 class KernelBuildPaths:
     kernel_dir = Path("./kernels")
     kernel_sources_dir = kernel_dir / "sources"
-    build_dir = kernel_sources_dir / "build"
-    linux_stable = build_dir / "linux-stable"
+    linux_stable = kernel_sources_dir / "linux-stable"
     configs_dir = kernel_dir / "configs"
 
 
@@ -135,7 +134,7 @@ def clone_kernel_source(ctx: InvokeContext) -> None:
     )
 
     # restart compiler if we had to clone the kernel sources again
-    cc = get_compiler(ctx, KernelBuildPaths.build_dir)
+    cc = get_compiler(ctx, KernelBuildPaths.kernel_sources_dir)
     cc.stop()
 
 
@@ -211,7 +210,7 @@ def get_kernel_image_name(arch: Arch) -> str:
 
 @task  # type: ignore
 def build_package(ctx: InvokeContext, version: KernelVersion, arch: Arch) -> None:
-    deb_files = glob(f"{KernelBuildPaths.build_dir}/*.deb")
+    deb_files = glob(f"{KernelBuildPaths.kernel_sources_dir}/*.deb")
 
     kdir = get_kernel_pkg_dir(version)
     kdir.mkdir(exist_ok=True)
@@ -285,6 +284,13 @@ def build(
     )
 
 
+def requires_gcc8(kernel_version: KernelVersion) -> bool:
+    if kernel_version < KernelVersion(5, 5, 0):
+        return True
+
+    return False
+
+
 def build_kernel(
     ctx: InvokeContext,
     kversion: KernelVersion,
@@ -298,18 +304,14 @@ def build_kernel(
     else:
         arch = Arch.from_str(arch)
 
-    use_gcc8 = False
-    if kversion < KernelVersion(5, 5, 0):
-        use_gcc8 = True
-
     context = BuildContext(kversion)
     context.acquire()
     checkout_kernel(ctx, kversion)
 
     run_cmd = ctx.run
     source_dir = KernelBuildPaths.linux_stable
-    if use_gcc8 or always_use_gcc8:
-        cc = get_compiler(ctx, KernelBuildPaths.build_dir)
+    if requires_gcc8(kversion) or always_use_gcc8:
+        cc = get_compiler(ctx, KernelBuildPaths.kernel_sources_dir)
         run_cmd = cc.exec
         source_dir = CONTAINER_LINUX_BUILD_PATH / "linux-stable"
 
@@ -335,7 +337,7 @@ def clean(ctx: InvokeContext, kernel_version: str | None = None) -> None:
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && git checkout master")
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && rm .config", warn=True)
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && rm -r debian", warn=True)
-    ctx.run(f"cd {KernelBuildPaths.build_dir} && rm *", warn=True)
+    ctx.run(f"cd {KernelBuildPaths.kernel_sources_dir} && rm *", warn=True)
     ctx.run(f"rm -f {KernelBuildPaths.linux_stable}/vmlinux-gdb.py")
     ctx.run(f"rm -f {KernelBuildPaths.linux_stable}/linux.tar.gz")
 
@@ -343,5 +345,5 @@ def clean(ctx: InvokeContext, kernel_version: str | None = None) -> None:
         cc = get_compiler(ctx, KernelBuildPaths.linux_stable)
         cc.exec("rm -f /tmp/*", allow_fail=True)
 
-    info("[+] Releasing build context for kernel {kversion}")
+    info(f"[+] Releasing build context for kernel {kversion}")
     context.release()
