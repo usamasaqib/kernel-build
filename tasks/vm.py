@@ -13,12 +13,15 @@ from tasks.kernel import (
 )
 from tasks.rootfs import rootfs_build
 from tasks.tool import Exit
+from invoke.context import Context as InvokeContext
+
+from typing import Optional
 
 IP_ADDR = "169.254.0.%s"
 GUEST_ADDR = "169.254.0.%s"
 
 
-def tap_interface_name():
+def tap_interface_name() -> str:
     interfaces = netifaces.interfaces()
     for i in range(1, 100):
         name = f"qemu_tap-{i}"
@@ -27,8 +30,10 @@ def tap_interface_name():
 
         return name
 
+    raise Exit("could not find a valid suffix for tap name. Too may taps active")
 
-def setup_tap_interface(ctx, kernel_version: KernelVersion):
+
+def setup_tap_interface(ctx: InvokeContext, kernel_version: KernelVersion) -> str:
     manifest_file = get_kernel_pkg_dir(kernel_version) / "kernel.manifest"
     with open(manifest_file, "r") as f:
         manifest = json.load(f)
@@ -68,7 +73,13 @@ def setup_tap_interface(ctx, kernel_version: KernelVersion):
     return tap_name
 
 
-def setup_kernel_package(ctx, kernel_version, arch, compile_only, always_use_gcc8):
+def setup_kernel_package(
+    ctx: InvokeContext,
+    kernel_version: KernelVersion,
+    arch: Arch,
+    compile_only: bool,
+    always_use_gcc8: bool,
+) -> None:
     build_kernel(
         ctx,
         kversion=kernel_version,
@@ -79,7 +90,7 @@ def setup_kernel_package(ctx, kernel_version, arch, compile_only, always_use_gcc
     rootfs_build(ctx, kernel_version)
 
 
-def find_free_gdb_port():
+def find_free_gdb_port() -> int:
     kernel_dir = os.path.join(".", "kernels", "sources")
     all_kernels = glob(f"{kernel_dir}/kernel-*")
     ports = list()
@@ -99,7 +110,9 @@ def find_free_gdb_port():
     return 0
 
 
-def add_gdb_script(ctx, kernel_version, port):
+def add_gdb_script(
+    ctx: InvokeContext, kernel_version: KernelVersion, port: int
+) -> None:
     kdir = get_kernel_pkg_dir(kernel_version)
     if not os.path.exists(kdir):
         raise Exit(f"Kernel directory '{kdir}' not present")
@@ -122,7 +135,7 @@ def add_gdb_script(ctx, kernel_version, port):
     ctx.run(f"chmod +x {gdb_script}")
 
 
-@task(
+@task(  # type: ignore
     help={
         "kernel_version": "kernel version string of the form v6.8 or v5.2.20",
         "arch": "architecture of the form x86 or aarch64, etc.",
@@ -130,16 +143,16 @@ def add_gdb_script(ctx, kernel_version, port):
     }
 )
 def init(
-    ctx,
+    ctx: InvokeContext,
     kernel_version: str,
-    arch: str | None = None,
+    platform_arch: Optional[str] = None,
     compile_only: bool = False,
     always_use_gcc8: bool = False,
-):
-    if arch is None:
+) -> None:
+    if platform_arch is None:
         arch = Arch.local()
     else:
-        arch = Arch.from_str(arch)
+        arch = Arch.from_str(platform_arch)
 
     kversion = KernelVersion.from_str(ctx, kernel_version)
     pkg_dir = get_kernel_pkg_dir(kversion)
@@ -178,16 +191,16 @@ def init(
     add_gdb_script(ctx, kversion, port)
 
 
-@task
-def cleanup_taps(ctx):
+@task  # type: ignore
+def cleanup_taps(ctx: InvokeContext) -> None:
     interfaces = netifaces.interfaces()
     for tap in interfaces:
         if "qemu_tap" in tap:
             ctx.run(f"sudo ip link del {tap}", warn=True)
 
 
-@task
-def clean(ctx, kernel_version):
+@task  # type: ignore
+def clean(ctx: InvokeContext, kernel_version: str) -> None:
     kversion = KernelVersion.from_str(ctx, kernel_version)
     kernel_dir = get_kernel_pkg_dir(kversion)
     manifest_file = get_kernel_pkg_dir(kversion) / "kernel.manifest"

@@ -5,7 +5,9 @@ import json
 import netifaces
 from invoke import task
 from invoke.exceptions import Exit
+from invoke.context import Context as InvokeContext
 
+from typing import Optional
 from tasks.kernel import KernelVersion
 
 DEBIAN_SOURCE_LISTS = """
@@ -180,15 +182,15 @@ def build(
 
 
 def rootfs_build(
-    ctx,
-    kernel_version,
-    arch=None,
-    lean=False,
-    img_size=DEFAULT_IMG_SIZE,
-    extra_pkgs="",
-    release=DEFAULT_DEBIAN,
-    qcow2=False,
-):
+    ctx: InvokeContext,
+    kernel_version: KernelVersion,
+    arch: Optional[str] = None,
+    lean: bool = False,
+    img_size: str = DEFAULT_IMG_SIZE,
+    extra_pkgs: str = "",
+    release: str = DEFAULT_DEBIAN,
+    qcow2: bool = False,
+) -> None:
     if arch is None:
         arch = platform.machine()
 
