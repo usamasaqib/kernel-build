@@ -14,12 +14,14 @@ class Arch:
         kernel_arch: str,
         kbuild_arch: KbuildArchName | None,
         spellings: set[str],
+        debarch: str,
     ):
         self.name = name
         self.spellings = spellings
         self.gcc_arch = gcc_arch
         self._kbuild_arch: KbuildArchName | None = kbuild_arch
         self.kernel_arch = kernel_arch
+        self.debarch = debarch
 
     @property
     def kbuild_arch(self) -> KbuildArchName:
@@ -64,6 +66,7 @@ ARCH_ARM64 = Arch(
     gcc_arch="aarch64",
     kernel_arch="arm64",
     kbuild_arch="arm64",
+    debarch="arm64",
     spellings={"arm64", "aarch64"},
 )
 ARCH_AMD64 = Arch(
@@ -71,6 +74,7 @@ ARCH_AMD64 = Arch(
     gcc_arch="x86_64",
     kernel_arch="x86",
     kbuild_arch="x86",
+    debarch="amd64",
     spellings={"amd64", "x86_64", "x64", "x86-64"},
 )
 
