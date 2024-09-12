@@ -1,4 +1,11 @@
-#!/bin/sh -eux
+#!/bin/sh
+
+set -euxo pipefail
+
+if [[ $UID = 0 ]] ; then
+  echo "Please dont run this script as root, since the gef scripts will get setup for the root user"
+  exit 1
+fi
 
 echo "[+] apt"
 sudo apt-get update
