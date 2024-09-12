@@ -7,6 +7,8 @@ import re
 from invoke import task
 from invoke.exceptions import Exit
 
+from tasks.kernel import KernelVersion
+
 DEBIAN_SOURCE_LISTS = """
 deb http://deb.debian.org/debian bullseye main
 deb-src http://deb.debian.org/debian bullseye main
@@ -157,6 +159,18 @@ def setup_dev_env(ctx, kernel_version, manifest):
 
 @task
 def build(
+    ctx,
+    kernel_version,
+    arch=None,
+    lean=False,
+    img_size=DEFAULT_IMG_SIZE,
+    extra_pkgs="",
+    release=DEFAULT_DEBIAN,
+    qcow2=False,
+):
+    rootfs_build(ctx, KernelVersion.from_str(ctx, kernel_version), arch, lean, img_size, extra_pkgs, release, qcow2)
+
+def rootfs_build(
     ctx,
     kernel_version,
     arch=None,

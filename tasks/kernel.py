@@ -182,7 +182,7 @@ def get_kernel_image_name(arch: Arch) -> str:
 
 @task
 def build_package(ctx, version: KernelVersion, arch: Arch):
-    deb_files = glob(f"{KernelBuildPaths.kernel_sources_dir}/*.deb")
+    deb_files = glob(f"{KernelBuildPaths.build_dir}/*.deb")
 
     kdir = get_kernel_pkg_dir(version)
     kdir.mkdir(exist_ok=True)
@@ -223,6 +223,8 @@ EXTRA_CONFIG = [
     "./kernels/configs/bpf.config",
     "./kernels/configs/virtio.config",
     "./kernels/configs/trace.config",
+    "./kernels/configs/net.config",
+    "./kernels/configs/net-drivers.config",
     "./kernels/configs/remove-drivers.config",
 ]
 
@@ -279,7 +281,7 @@ def build_kernel(
     build_package(ctx, kversion, arch)
     kuuid(ctx, kversion)
 
-    info("[+] Kernel {kernel_version} build complete")
+    info(f"[+] Kernel {kversion} build complete")
 
 
 @task
@@ -292,11 +294,11 @@ def clean(ctx, kernel_version: str | None = None):
         context = BuildContext(kversion)
 
     ctx.run(f"make -C {KernelBuildPaths.linux_stable} clean")
-    ctx.run(f"make -C {KernelBuildPaths.linux_stable}/tools clean")
+    ctx.run(f"make -C {KernelBuildPaths.linux_stable}/tools clean", warn=True)
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && git checkout master")
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && rm .config", warn=True)
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && rm -r debian", warn=True)
-    ctx.run(f"cd {KernelBuildPaths.kernel_sources_dir} && rm *", warn=True)
+    ctx.run(f"cd {KernelBuildPaths.build_dir} && rm *", warn=True)
     ctx.run(f"rm -f {KernelBuildPaths.linux_stable}/vmlinux-gdb.py")
     ctx.run(f"rm -f {KernelBuildPaths.linux_stable}/linux.tar.gz")
 

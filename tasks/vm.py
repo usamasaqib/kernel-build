@@ -8,7 +8,7 @@ from glob import glob
 from invoke.exceptions import Exit
 from tasks.arch import Arch
 from tasks.kernel import build_kernel , get_kernel_pkg_dir, get_kernel_image_name, KernelBuildPaths, KernelVersion
-from tasks.rootfs import build as rootfs_build
+from tasks.rootfs import rootfs_build
 from tasks.tool import warn, Exit
 
 IP_ADDR = "169.254.0.%s"
@@ -152,10 +152,9 @@ def init(
 
     tap = setup_tap_interface(ctx, kversion)
 
-    kabspath = os.path.abspath(kernel_dir)
     kimage = get_kernel_image_name(arch)
     ctx.run(
-        f"echo 'sudo {qemu_script} {pkg_dir.absolute()}/rootfs.qcow2 {pkg_dir.absolute}/{kimage} {tap} {port}' > {pkg_dir}/run.sh"
+        f"echo 'sudo {qemu_script} {pkg_dir.absolute()}/rootfs.qcow2 {pkg_dir.absolute()}/{kimage} {tap} {port}' > {pkg_dir}/run.sh"
     )
     ctx.run(f"chmod +x {pkg_dir.absolute()}/run.sh")
 
@@ -164,7 +163,7 @@ def init(
     with open(pkg_dir / "kernel.manifest", "w") as f:
         json.dump(manifest, f)
 
-    ctx.run(f"rm -f {KernelBuildPaths.kernel_sources_dir}/linux-*", warn=True)
+    ctx.run(f"rm -f {KernelBuildPaths.build_dir}/linux-*", warn=True)
 
     add_gdb_script(ctx, kversion, port)
 
@@ -179,8 +178,9 @@ def cleanup_taps(ctx):
 
 @task
 def clean(ctx, kernel_version, all_vms=False):
-    kernel_dir = get_kernel_pkg_dir(kernel_version)
-    manifest_file = get_kernel_pkg_dir(kernel_version) / "kernel.manifest"
+    kversion = KernelVersion.from_str(ctx, kernel_version)
+    kernel_dir = get_kernel_pkg_dir(kversion)
+    manifest_file = get_kernel_pkg_dir(kversion) / "kernel.manifest"
     with open(manifest_file, "r") as f:
         manifest = json.load(f)
 
