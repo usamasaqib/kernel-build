@@ -3,3 +3,4 @@
 ruff format .
 ruff check --fix .
 vulture
+mypy

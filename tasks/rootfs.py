@@ -8,7 +8,7 @@ from invoke.exceptions import Exit
 from invoke.context import Context as InvokeContext
 
 from typing import Optional
-from tasks.kernel import KernelVersion
+from tasks.kernel import KernelVersion, KernelManifest
 
 DEBIAN_SOURCE_LISTS = """
 deb http://deb.debian.org/debian bullseye main
@@ -34,7 +34,7 @@ PREINSTALL_PKGS = (
 )
 
 
-def add_repos(ctx):
+def add_repos(ctx: InvokeContext) -> None:
     chroot = os.path.join(".", "images", "chroot")
     sources_list = os.path.join(chroot, "etc", "apt", "sources.list")
     ctx.run(f"echo '{DEBIAN_SOURCE_LISTS}' | sudo tee {sources_list}")
@@ -43,7 +43,7 @@ def add_repos(ctx):
 # These are the debian packages created during kernel build
 # These include the headers the debug build of the kernel, etc.
 # Check the ./kernels/sources/kernel-[version] directory for all of them
-def install_deb_packages(ctx, kernel_version):
+def install_deb_packages(ctx: InvokeContext, kernel_version: KernelVersion) -> None:
     pkg_dir = os.path.join(f"kernels/sources/kernel-{kernel_version}")
     if not os.path.exists(pkg_dir):
         raise Exit(f"package dir for version {kernel_version} does not exist")
@@ -65,7 +65,7 @@ def install_deb_packages(ctx, kernel_version):
         ctx.run(f"rm -rf {scratch}")
 
 
-def all_guest_gateways():
+def all_guest_gateways() -> list[str]:
     kernel_dir = os.path.join(".", "kernels", "sources")
     all_kernels = glob.glob(f"{kernel_dir}/kernel-*")
     tap_ips = list()
@@ -81,7 +81,7 @@ def all_guest_gateways():
 AF_INET = 2
 
 
-def interface_ips():
+def interface_ips() -> list[str]:
     interfaces = netifaces.interfaces()
     ips = list()
     for netif in interfaces:
@@ -95,7 +95,7 @@ def interface_ips():
     return ips
 
 
-def find_tap_ip():
+def find_tap_ip() -> tuple[str, int]:
     taken_ips = all_guest_gateways()
     up_interfaces = interface_ips()
 
@@ -109,7 +109,9 @@ def find_tap_ip():
     raise Exit(f"no IP available in range {IP_ADDR % 0}/24")
 
 
-def setup_guest_network(ctx, version, kuuid):
+def setup_guest_network(
+    ctx: InvokeContext, version: KernelVersion, kuuid: str
+) -> tuple[str, str]:
     chroot_dir = os.path.join(".", "images", "chroot")
     kernel_dir = os.path.join(".", "kernels", "sources", f"kernel-{version}")
 
@@ -144,7 +146,9 @@ echo "auto eth0\niface eth0 inet static\n\taddress {guest_ip}/30\n\tgateway {tap
     return tap_ip, guest_ip
 
 
-def setup_dev_env(ctx, kernel_version, manifest):
+def setup_dev_env(
+    ctx: InvokeContext, kernel_version: KernelVersion, manifest: KernelManifest
+) -> KernelManifest:
     if not kernel_version:
         raise Exit("no kernel version provided")
 
@@ -158,17 +162,17 @@ def setup_dev_env(ctx, kernel_version, manifest):
     return manifest
 
 
-@task
+@task  # type: ignore
 def build(
-    ctx,
-    kernel_version,
-    arch=None,
-    lean=False,
-    img_size=DEFAULT_IMG_SIZE,
-    extra_pkgs="",
-    release=DEFAULT_DEBIAN,
-    qcow2=False,
-):
+    ctx: InvokeContext,
+    kernel_version: str,
+    arch: Optional[str] = None,
+    lean: bool = False,
+    img_size: str = DEFAULT_IMG_SIZE,
+    extra_pkgs: str = "",
+    release: str = DEFAULT_DEBIAN,
+    qcow2: bool = False,
+) -> None:
     rootfs_build(
         ctx,
         KernelVersion.from_str(ctx, kernel_version),

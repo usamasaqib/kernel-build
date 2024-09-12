@@ -11,6 +11,15 @@ from typing import Callable, Optional
 from tasks.arch import Arch
 from tasks.tool import info, Exit
 from tasks.compiler import get_compiler, CONTAINER_LINUX_BUILD_PATH, CompilerExec
+from typing_extensions import TypedDict
+
+
+class KernelManifest(TypedDict):
+    kid: str
+    gateway_ip: str
+    guest_ip: str
+    tap_name: str
+    gdb_port: int
 
 
 class KernelVersion:
