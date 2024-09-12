@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import sys
+import os
 from typing import Protocol, Optional
 from invoke.context import Context
 from tasks.arch import Arch
@@ -29,6 +30,17 @@ class CompilerImage:
         self.mountpoint = Path(mountpoint)
 
     @property
+    def docker_cmd(self):
+        with open("/etc/groups", 'r') as f:
+            groups = f.read().split()
+        for group in groups:
+            if group.split(':')[0] == "docker":
+                if os.getlogin() in group:
+                    return "docker"
+
+        return "sudo docker"
+
+    @property
     def name(self):
         return f"kernel-build-compiler-{self.arch.name}"
 
@@ -42,7 +54,9 @@ class CompilerImage:
             return True
 
         args = "a" if allow_stopped else ""
-        res = self.ctx.run(f"docker ps -{args}qf \"name={self.name}\"", hide=True)
+        res = self.ctx.run(
+            f"{self.docker_cmd} ps -{args}qf \"name={self.name}\"", hide=True
+        )
         if res is not None and res.ok:
             return bool(
                 res.stdout.rstrip() != ""
@@ -80,29 +94,33 @@ class CompilerImage:
 
         # Set FORCE_COLOR=1 so that termcolor works in the container
         self.ctx.run(
-            f"docker exec -u {user} -i -e FORCE_COLOR=1 {self.name} bash -c \"{cmd}\"",
+            f"{self.docker_cmd} exec -u {user} -i -e FORCE_COLOR=1 {self.name} bash -c \"{cmd}\"",
             hide=(not verbose),
             warn=allow_fail,
         )
 
     def stop(self) -> None:
-        self.ctx.run(f"docker rm -f $(docker ps -aqf \"name={self.name}\")")
+        self.ctx.run(
+            f"{self.docker_cmd} rm -f $({self.docker_cmd} ps -aqf \"name={self.name}\")"
+        )
 
     def start(self) -> None:
         if self.is_loaded:
             self.stop()
 
         # Check if the image exists
-        res = self.ctx.run(f"docker image inspect {self.image}", hide=True, warn=True)
+        res = self.ctx.run(
+            f"{self.docker_cmd} image inspect {self.image}", hide=True, warn=True
+        )
         if res is None or not res.ok:
             info(f"[!] Image {self.image} not found, building it...")
-            self.ctx.run(f"cd scripts/ && docker build -t {self.image} .")
+            self.ctx.run(f"cd scripts/ && {self.docker_cmd} build -t {self.image} .")
 
         if not self.mountpoint.exists():
             self.mountpoint.mkdir(parents=True)
 
         res = self.ctx.run(
-            f"docker run -d --restart always --name {self.name} "
+            f"{self.docker_cmd} run -d --restart always --name {self.name} "
             f"--mount type=bind,source={self.mountpoint.absolute()},target={CONTAINER_LINUX_BUILD_PATH} "
             f"{self.image} sleep \"infinity\"",
         )
