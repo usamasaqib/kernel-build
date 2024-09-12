@@ -129,7 +129,7 @@ def add_gdb_script(
     if requires_gcc8(kernel_version):
         cc = get_compiler(ctx, KernelBuildPaths.kernel_sources_dir)
         run_cmd = cc.exec
-        source_dir = CONTAINER_LINUX_BUILD_PATH / "linux-stable"
+        source_dir = CONTAINER_LINUX_BUILD_PATH / os.path.basename(kdir)
 
     run_cmd(f"cd {source_dir}/linux-source && make scripts_gdb")
 

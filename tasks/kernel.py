@@ -335,6 +335,7 @@ def clean(ctx: InvokeContext, kernel_version: str | None = None) -> None:
     ctx.run(f"make -C {KernelBuildPaths.linux_stable} clean")
     ctx.run(f"make -C {KernelBuildPaths.linux_stable}/tools clean", warn=True)
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && git checkout master")
+    ctx.run(f"make -C {KernelBuildPaths.linux_stable} clean")
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && rm .config", warn=True)
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && rm -r debian", warn=True)
     ctx.run(f"cd {KernelBuildPaths.kernel_sources_dir} && rm *", warn=True)
