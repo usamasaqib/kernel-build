@@ -3,7 +3,6 @@ import os
 import glob
 import json
 import netifaces
-import re
 from invoke import task
 from invoke.exceptions import Exit
 
@@ -168,7 +167,17 @@ def build(
     release=DEFAULT_DEBIAN,
     qcow2=False,
 ):
-    rootfs_build(ctx, KernelVersion.from_str(ctx, kernel_version), arch, lean, img_size, extra_pkgs, release, qcow2)
+    rootfs_build(
+        ctx,
+        KernelVersion.from_str(ctx, kernel_version),
+        arch,
+        lean,
+        img_size,
+        extra_pkgs,
+        release,
+        qcow2,
+    )
+
 
 def rootfs_build(
     ctx,
@@ -180,7 +189,7 @@ def rootfs_build(
     release=DEFAULT_DEBIAN,
     qcow2=False,
 ):
-    if arch == None:
+    if arch is None:
         arch = platform.machine()
 
     if arch == "aarch64":

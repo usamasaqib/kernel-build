@@ -5,13 +5,22 @@ from pathlib import Path
 import sys
 from typing import Protocol, Optional
 from invoke.context import Context
-from tasks.arch import ARCH_AMD64, ARCH_ARM64, Arch
-from tasks.tool import info, warn, Exit
+from tasks.arch import Arch
+from tasks.tool import info, warn
 
 CONTAINER_LINUX_BUILD_PATH = Path("/tmp/build")
 
+
 class CompilerExec(Protocol):
-    def __call__(self, cmd: str, user: str = "compiler", verbose: bool = True, run_dir: Optional[Path] = None, allow_fail: bool = False) -> None: ...
+    def __call__(
+        self,
+        cmd: str,
+        user: str = "compiler",
+        verbose: bool = True,
+        run_dir: Optional[Path] = None,
+        allow_fail: bool = False,
+    ) -> None: ...
+
 
 class CompilerImage:
     def __init__(self, ctx: Context, arch: Arch, mountpoint: Path):
@@ -35,7 +44,9 @@ class CompilerImage:
         args = "a" if allow_stopped else ""
         res = self.ctx.run(f"docker ps -{args}qf \"name={self.name}\"", hide=True)
         if res is not None and res.ok:
-            return bool(res.stdout.rstrip() != "") # typecasting for the benefit of mypy
+            return bool(
+                res.stdout.rstrip() != ""
+            )  # typecasting for the benefit of mypy
         return False
 
     @property
@@ -54,7 +65,14 @@ class CompilerImage:
             except Exception as e:
                 raise e
 
-    def exec(self, cmd: str, user: str = "compiler", verbose: bool = True, run_dir: Optional[Path] = None, allow_fail: bool = False) -> None:
+    def exec(
+        self,
+        cmd: str,
+        user: str = "compiler",
+        verbose: bool = True,
+        run_dir: Optional[Path] = None,
+        allow_fail: bool = False,
+    ) -> None:
         if run_dir is not None:
             cmd = f"cd {run_dir} && {cmd}"
 
@@ -79,7 +97,7 @@ class CompilerImage:
         if res is None or not res.ok:
             info(f"[!] Image {self.image} not found, building it...")
             self.ctx.run(f"cd scripts/ && docker build -t {self.image} .")
-            
+
         if not self.mountpoint.exists():
             self.mountpoint.mkdir(parents=True)
 
@@ -97,19 +115,28 @@ class CompilerImage:
         if uid == 0:
             # If we're starting the compiler as root, we won't be able to create the compiler user
             # and we will get weird failures later on, as the user 'compiler' won't exist in the container
-            raise ValueError("Cannot start compiler as root, we need to run as a non-root user")
+            raise ValueError(
+                "Cannot start compiler as root, we need to run as a non-root user"
+            )
 
         # Now create the compiler user with same UID and GID as the current user
         self.exec(f"getent group {gid} || groupadd -f -g {gid} compiler", user="root")
-        self.exec(f"getent passwd {uid} || useradd -m -u {uid} -g {gid} compiler", user="root")
+        self.exec(
+            f"getent passwd {uid} || useradd -m -u {uid} -g {gid} compiler", user="root"
+        )
 
         if sys.platform != "darwin":  # No need to change permissions in MacOS
             self.exec(
-                f"chown {uid}:{gid} {CONTAINER_LINUX_BUILD_PATH} && chown -R {uid}:{gid} {CONTAINER_LINUX_BUILD_PATH}", user="root"
+                f"chown {uid}:{gid} {CONTAINER_LINUX_BUILD_PATH} && chown -R {uid}:{gid} {CONTAINER_LINUX_BUILD_PATH}",
+                user="root",
             )
 
         self.exec("apt install sudo", user="root")
-        self.exec("usermod -aG sudo compiler && echo 'compiler ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers", user="root")
+        self.exec(
+            "usermod -aG sudo compiler && echo 'compiler ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers",
+            user="root",
+        )
+
 
 def get_compiler(ctx: Context, mountpoint: Path) -> CompilerImage:
     cc = CompilerImage(ctx, Arch.local(), mountpoint)

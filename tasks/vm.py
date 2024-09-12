@@ -1,18 +1,22 @@
 import os
-import socket
 import netifaces
 import json
-import platform
 from invoke import task
 from glob import glob
-from invoke.exceptions import Exit
 from tasks.arch import Arch
-from tasks.kernel import build_kernel , get_kernel_pkg_dir, get_kernel_image_name, KernelBuildPaths, KernelVersion
+from tasks.kernel import (
+    build_kernel,
+    get_kernel_pkg_dir,
+    get_kernel_image_name,
+    KernelBuildPaths,
+    KernelVersion,
+)
 from tasks.rootfs import rootfs_build
-from tasks.tool import warn, Exit
+from tasks.tool import Exit
 
 IP_ADDR = "169.254.0.%s"
 GUEST_ADDR = "169.254.0.%s"
+
 
 def tap_interface_name():
     interfaces = netifaces.interfaces()
@@ -65,7 +69,13 @@ def setup_tap_interface(ctx, kernel_version: KernelVersion):
 
 
 def setup_kernel_package(ctx, kernel_version, arch, compile_only, always_use_gcc8):
-    build_kernel(ctx, kversion=kernel_version, arch=arch, compile_only=compile_only, always_use_gcc8=always_use_gcc8)
+    build_kernel(
+        ctx,
+        kversion=kernel_version,
+        arch=arch,
+        compile_only=compile_only,
+        always_use_gcc8=always_use_gcc8,
+    )
     rootfs_build(ctx, kernel_version)
 
 
@@ -120,9 +130,9 @@ def add_gdb_script(ctx, kernel_version, port):
     }
 )
 def init(
-    ctx, 
-    kernel_version: str, 
-    arch: str | None = None, 
+    ctx,
+    kernel_version: str,
+    arch: str | None = None,
     compile_only: bool = False,
     always_use_gcc8: bool = False,
 ):
@@ -177,7 +187,7 @@ def cleanup_taps(ctx):
 
 
 @task
-def clean(ctx, kernel_version, all_vms=False):
+def clean(ctx, kernel_version):
     kversion = KernelVersion.from_str(ctx, kernel_version)
     kernel_dir = get_kernel_pkg_dir(kversion)
     manifest_file = get_kernel_pkg_dir(kversion) / "kernel.manifest"

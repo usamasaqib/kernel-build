@@ -6,7 +6,7 @@ from invoke.context import Context as InvokeContext
 import uuid
 import json
 from pathlib import Path
-from typing import Callable, Any, Optional
+from typing import Callable, Optional
 
 from tasks.arch import Arch
 from tasks.tool import info, Exit
@@ -22,7 +22,7 @@ class KernelVersion:
     def __str__(self) -> str:
         return f"v{self.major}.{self.minor}.{self.patch}"
 
-    def __eq__(self, other: KernelVersion) -> bool: # type: ignore
+    def __eq__(self, other: KernelVersion) -> bool:  # type: ignore
         if isinstance(other, KernelVersion):
             return (
                 self.major == other.major
@@ -141,7 +141,9 @@ def discover_latest_patch(ctx: InvokeContext, major: int, minor: int) -> int:
     return KernelVersion.from_str(None, tag).patch
 
 
-def checkout_kernel(ctx: InvokeContext, kernel_version: KernelVersion, pull: bool = False) -> None:
+def checkout_kernel(
+    ctx: InvokeContext, kernel_version: KernelVersion, pull: bool = False
+) -> None:
     if not KernelBuildPaths.linux_stable.exists():
         clone_kernel_source(ctx)
 
@@ -171,6 +173,8 @@ def make_config(ctx: InvokeContext, extra_config: Optional[str]) -> None:
 
 
 Runner = Callable[[str], Optional[runners.Result]] | CompilerExec
+
+
 def make_kernel(run: Runner, sources_dir: Path, compile_only: bool) -> None:
     if compile_only:
         run(f"make -C {sources_dir} -j$(nproc) bzImage KCFLAGS=-ggdb3")
@@ -178,7 +182,7 @@ def make_kernel(run: Runner, sources_dir: Path, compile_only: bool) -> None:
         run(f"make -C {sources_dir} -j$(nproc) deb-pkg KCFLAGS=-ggdb3")
 
 
-@task # type: ignore
+@task  # type: ignore
 def checkout(ctx: InvokeContext, kernel_version: str) -> None:
     checkout_kernel(ctx, KernelVersion.from_str(ctx, kernel_version))
 
@@ -196,7 +200,7 @@ def get_kernel_image_name(arch: Arch) -> str:
     raise Exit("unexpect architecture {arch}")
 
 
-@task # type: ignore
+@task  # type: ignore
 def build_package(ctx: InvokeContext, version: KernelVersion, arch: Arch) -> None:
     deb_files = glob(f"{KernelBuildPaths.build_dir}/*.deb")
 
@@ -246,7 +250,7 @@ EXTRA_CONFIG = [
 ]
 
 
-@task( # type: ignore
+@task(  # type: ignore
     help={
         "kernel_version": "kernel version string of the form v6.8 or v5.2.20",
         "arch": "architecture of the form x86 or aarch64, etc.",
@@ -308,7 +312,7 @@ def build_kernel(
     info(f"[+] Kernel {kversion} build complete")
 
 
-@task # type: ignore
+@task  # type: ignore
 def clean(ctx: InvokeContext, kernel_version: str | None = None) -> None:
     if kernel_version is None:
         context = BuildContext.from_current()

@@ -5,7 +5,6 @@ Standardized management of architecture values
 from __future__ import annotations
 
 import platform
-import sys
 from typing import Literal
 
 KbuildArchName = Literal['x86', 'arm64']
@@ -33,27 +32,12 @@ class Arch:
         spellings: set[str],
     ):
         self.name = name  #: Unique name for this architecture within this file.
-        self.spellings = (
-            spellings  #: All the possible names for this architecture. Will be used when parsing user input.
-        )
+        self.spellings = spellings  #: All the possible names for this architecture. Will be used when parsing user input.
         self.gcc_arch = gcc_arch  #: Architecture used for GCC
-        self._kbuild_arch: KbuildArchName | None = kbuild_arch  #: Architecture used for build, if supported
+        self._kbuild_arch: KbuildArchName | None = (
+            kbuild_arch  #: Architecture used for build, if supported
+        )
         self.kernel_arch = kernel_arch  #: Name for the architecture in the Linux kernel
-
-    def gcc_compiler(self, platform: str = sys.platform) -> str:
-        """Return the GCC compiler to use for this architecture, takes into account
-        the platform we are running on (linux/darwin/windows).
-
-        Raises ValueError if the platform is not recognized.
-        """
-        if platform == "darwin":
-            return f"{self.gcc_arch}-apple-darwin23-gcc"
-        elif platform == "linux":
-            return f"{self.gcc_arch}-linux-gnu-gcc"
-        elif platform == "windows":
-            return f"{self.gcc_arch}-w64-mingw32-gcc"
-        else:
-            raise ValueError(f"Unknown platform: {platform}")
 
     @property
     def kbuild_arch(self) -> KbuildArchName:
@@ -66,7 +50,7 @@ class Arch:
             raise ValueError(f"Kernel build arch not defined for {self.name}")
         return self._kbuild_arch
 
-    def __eq__(self, other: Arch) -> bool: # type: ignore
+    def __eq__(self, other: Arch) -> bool:  # type: ignore
         if not isinstance(other, Arch):
             return False
         return self.name == other.name
