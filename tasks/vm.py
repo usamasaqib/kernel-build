@@ -140,7 +140,7 @@ def add_gdb_script(
 @task(  # type: ignore
     help={
         "kernel_version": "kernel version string of the form v6.8 or v5.2.20",
-        "arch": "architecture of the form x86 or aarch64, etc.",
+        "platform_arch": "architecture of the form x86 or aarch64, etc.",
         "compile_only": "only rebuild bzImage",
     }
 )
