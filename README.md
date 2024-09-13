@@ -14,6 +14,8 @@ Moreover, a script `gdb.sh` is provided to easily attach a debugger session to t
 Review and run 
 ```
 ./scripts/dependencies.sh
+. ./venv
+pip install -r requirements.txt
 ```
 
 
