@@ -62,7 +62,7 @@ class KernelVersion:
         return f"kernel-{self}"
 
     @staticmethod
-    def from_str(ctx: InvokeContext, v: str) -> KernelVersion:
+    def from_str(ctx: Optional[InvokeContext], v: str) -> KernelVersion:
         if v[0] == "v":
             v = v[1:]
 
@@ -168,16 +168,16 @@ def make_config(ctx: InvokeContext, extra_config: Optional[str]) -> None:
     else:
         all_configs = set([Path(p) for p in extra_config.split(',')] + EXTRA_CONFIG)
 
-    dot_config = KernelBuildPaths.linux_stable / ".config"
-
     build_path = str(KernelBuildPaths.linux_stable)
-    ctx.run(f"make -C {build_path} defconfig")
-    ctx.run(f"make -C {build_path} kvm_guest.config")
+    ctx.run(f"make -C {build_path} KCONFIG_CONFIG=start.config defconfig")
 
+    start_config = KernelBuildPaths.linux_stable / "start.config"
     for cfg in all_configs:
-        ctx.run(f"tee -a < {cfg} {dot_config}")
+        ctx.run(f"tee -a < {cfg} {start_config}")
 
-    ctx.run(f"make -C {build_path} olddefconfig")
+    ctx.run(f"make -C {build_path} allnoconfig KCONFIG_ALLCONFIG=start.config")
+
+    ctx.run(f"make -C {build_path} kvm_guest.config")
 
 
 Runner = Callable[[str], Optional[runners.Result]] | CompilerExec
@@ -252,8 +252,6 @@ EXTRA_CONFIG = [
     KernelBuildPaths.configs_dir / "bpf.config",
     KernelBuildPaths.configs_dir / "virtio.config",
     KernelBuildPaths.configs_dir / "trace.config",
-    KernelBuildPaths.configs_dir / "net.config",
-    KernelBuildPaths.configs_dir / "net-drivers.config",
     KernelBuildPaths.configs_dir / "remove-drivers.config",
 ]
 

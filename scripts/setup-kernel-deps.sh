@@ -14,7 +14,8 @@ apt install -y git \
     build-essential \
     libssl-dev \
     debhelper-compat \
-    cmake
+    cmake \
+    rsync
 
 rm -rf /tmp/dwarves
 git -c http.sslVerify=false clone --recurse-submodules https://github.com/acmel/dwarves.git /tmp/dwarves

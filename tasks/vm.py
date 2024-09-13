@@ -71,7 +71,6 @@ def setup_tap_interface(ctx: InvokeContext, kernel_version: KernelVersion) -> st
     ctx.run(
         "sudo iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT"
     )
-
     ctx.run(f"sudo iptables -A FORWARD -i {tap_name} -o {default_interface} -j ACCEPT")
 
     return tap_name
@@ -125,7 +124,7 @@ def add_gdb_script(
     ctx.run(f"cp {cfg} {kdir}/linux-source")
 
     run_cmd = ctx.run
-    source_dir = KernelBuildPaths.linux_stable
+    source_dir = kdir
     if requires_gcc8(kernel_version):
         cc = get_compiler(ctx, KernelBuildPaths.kernel_sources_dir)
         run_cmd = cc.exec
@@ -136,7 +135,6 @@ def add_gdb_script(
     dbg_img = kdir.absolute() / "vmlinux"
     src_dir = kdir.absolute() / "linux-source"
     vmlinux_gdb = src_dir.absolute() / "vmlinux_gdb.py"
-
     gdb_script = kdir / "gdb.sh"
     with open(gdb_script, "w") as f:
         f.write("#!/bin/bash\n")
