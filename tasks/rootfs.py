@@ -152,20 +152,72 @@ chmod +x {kernel_dir}/ssh_shutdown
     return tap_ip, guest_ip
 
 
-def setup_dev_env(
-    ctx: InvokeContext, kernel_version: KernelVersion, manifest: KernelManifest
+def _setup_dev_env(
+    ctx: InvokeContext,
+    kernel_version: KernelVersion,
+    manifest: KernelManifest,
+    init: bool = True,
 ) -> KernelManifest:
     if not kernel_version:
         raise Exit("no kernel version provided")
 
-    add_repos(ctx)
+    if init:
+        add_repos(ctx)
+        tap, guest = setup_guest_network(ctx, kernel_version, manifest["kid"])
+        manifest["gateway_ip"] = tap
+        manifest["guest_ip"] = guest
 
     install_deb_packages(ctx, kernel_version)
-    tap, guest = setup_guest_network(ctx, kernel_version, manifest["kid"])
-    manifest["gateway_ip"] = tap
-    manifest["guest_ip"] = guest
 
     return manifest
+
+
+def _convert_to_qemu(ctx: InvokeContext, release_img: Path, qcow2_img: Path) -> None:
+    ctx.run(f"sudo qemu-img convert -f raw -O qcow2 {release_img} {qcow2_img}")
+    ctx.run(f"sudo rm {release_img}")
+    ctx.run(f"sudo chown 1000:1000 {qcow2_img}")
+    info(f"[+] QCOW2 {qcow2_img} written @ {qcow2_img}")
+
+
+@task  # type: ignore
+def setup_dev_env(
+    ctx: InvokeContext,
+    kernel_version: str,
+    init: bool = False,
+    release: str = DEFAULT_DEBIAN,
+):
+    kversion = KernelVersion.from_str(ctx, kernel_version)
+    kernel_dir = get_kernel_pkg_dir(kversion)
+    kernel_manifest = kernel_dir / "kernel.manifest"
+    with open(kernel_manifest, "r") as f:
+        manifest = json.load(f)
+
+    rootfs = kernel_dir / "rootfs.qcow2"
+    release_img = RootfsBuildPaths.images_dir / f"{release}.img"
+    if not init and rootfs.exists():
+        ctx.run(f"mv {rootfs} {RootfsBuildPaths.images_dir}/rootfs.qcow2")
+        ctx.run(
+            f"qemu-img convert {RootfsBuildPaths.images_dir}/rootfs.qcow2 {RootfsBuildPaths.images_dir}/rootfs.raw"
+        )
+        release_img = RootfsBuildPaths.images_dir / "rootfs.raw"
+        ctx.run(f"rm {RootfsBuildPaths.images_dir}/rootfs.qcow2")
+
+    RootfsBuildPaths.chroot.mkdir(exist_ok=True)
+    ctx.run(f"sudo chmod 0755 {RootfsBuildPaths.chroot}")
+    ctx.run(f"sudo mount -o exec,loop {release_img} {RootfsBuildPaths.chroot}")
+
+    manifest = _setup_dev_env(ctx, kversion, manifest, init=init)
+    if not init:
+        with open(kernel_manifest, "w") as f:
+            json.dump(manifest, f)
+
+    ctx.run(f"sudo umount {RootfsBuildPaths.chroot}")
+    ctx.run(f"rm -rf {RootfsBuildPaths.chroot}")
+    _convert_to_qemu(
+        ctx,
+        release_img,
+        kernel_dir / "rootfs.qcow2",
+    )
 
 
 @task  # type: ignore
@@ -232,8 +284,6 @@ def rootfs_build(
     debootparams += f"--unpack-tarball={cache_dir} {release} {RootfsBuildPaths.chroot}"
     debootstrap_cmd = f"sudo debootstrap {debootparams}"
 
-    qcow2_img = RootfsBuildPaths.images_dir / f"{release}.qcow2"
-
     provision_script = f"""
 #!/bin/bash
 dd if=/dev/zero of={release_img} bs=1 count=0 seek={img_size}
@@ -261,7 +311,7 @@ echo -en "127.0.1.1\tmyvm\n" | sudo tee -a {RootfsBuildPaths.chroot}/etc/hosts
         with open(kernel_manifest, "r") as f:
             manifest = json.load(f)
 
-        manifest = setup_dev_env(ctx, kernel_version, manifest)
+        manifest = _setup_dev_env(ctx, kernel_version, manifest)
 
         info(
             f"[+] generate kernel manifest for {kernel_version}:\n{json.dumps(manifest, indent=4)}"
@@ -270,11 +320,7 @@ echo -en "127.0.1.1\tmyvm\n" | sudo tee -a {RootfsBuildPaths.chroot}/etc/hosts
             json.dump(manifest, f)
 
     ctx.run(f"sudo umount {RootfsBuildPaths.chroot}")
+    ctx.run(f"rm -rf {RootfsBuildPaths.chroot}")
 
     info("[+] Rootfs build complete. Creating qcow2 file")
-    # convert to qcow2
-    ctx.run(f"sudo qemu-img convert -f raw -O qcow2 {release_img} {qcow2_img}")
-    ctx.run(f"sudo rm {release_img}")
-    ctx.run(f"sudo chown 1000:1000 {qcow2_img}")
-    ctx.run(f"mv {qcow2_img} {kernel_dir}/rootfs.qcow2")
-    info(f"[+] QCOW2 {qcow2_img} written @ {kernel_dir}/rootfs.qcow2")
+    _convert_to_qemu(ctx, release_img, kernel_dir / "rootfs.qcow2")

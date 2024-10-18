@@ -134,7 +134,7 @@ def add_gdb_script(
 
     dbg_img = kdir.absolute() / "vmlinux"
     src_dir = kdir.absolute() / "linux-source"
-    vmlinux_gdb = src_dir.absolute() / "vmlinux_gdb.py"
+    vmlinux_gdb = src_dir.absolute() / "vmlinux-gdb.py"
     gdb_script = kdir / "gdb.sh"
     with open(gdb_script, "w") as f:
         f.write("#!/bin/bash\n")

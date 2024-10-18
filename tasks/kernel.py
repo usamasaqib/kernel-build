@@ -162,6 +162,7 @@ def checkout_kernel(
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && git checkout {kernel_version}")
 
 
+@task  # type: ignore
 def make_config(ctx: InvokeContext, extra_config: Optional[str]) -> None:
     if extra_config is None:
         all_configs = set(EXTRA_CONFIG)
@@ -231,7 +232,8 @@ def build_package(ctx: InvokeContext, version: KernelVersion, arch: Arch) -> Non
     found = False
     for f in upstream:
         if "orig.tar.gz" in f:
-            ctx.run(f"mv {f} {kdir}/linux.tar.gz")
+            dst = f"{kdir}/linux.tar.gz"
+            ctx.run(f"rm -f {dst} && mv {f} {dst}")
             found = True
 
     if not found:
