@@ -13,11 +13,14 @@ from tasks.kernel import (
     KernelBuildPaths,
     KernelVersion,
     requires_gcc8,
+    DEFAULT_GIT_SOURCE,
+    KernelManifest,
 )
 from tasks.rootfs import rootfs_build
 from tasks.tool import Exit
 from invoke.context import Context as InvokeContext
 from tasks.compiler import get_compiler, CONTAINER_LINUX_BUILD_PATH
+from pathlib import Path
 
 from typing import Optional
 
@@ -82,6 +85,8 @@ def setup_kernel_package(
     arch: Arch,
     compile_only: bool,
     always_use_gcc8: bool,
+    kernel_src_dir: str | None,
+    git_source: str,
 ) -> None:
     build_kernel(
         ctx,
@@ -89,6 +94,8 @@ def setup_kernel_package(
         arch=arch,
         compile_only=compile_only,
         always_use_gcc8=always_use_gcc8,
+        kernel_src_dir=kernel_src_dir,
+        git_source=git_source,
     )
     rootfs_build(ctx, kernel_version)
 
@@ -158,6 +165,8 @@ def init(
     platform_arch: Optional[str] = None,
     compile_only: bool = False,
     always_use_gcc8: bool = False,
+    kernel_src_dir: str | None = None,
+    git_source: str = DEFAULT_GIT_SOURCE,
 ) -> None:
     if platform_arch is None:
         arch = Arch.local()
@@ -168,10 +177,26 @@ def init(
     pkg_dir = get_kernel_pkg_dir(kversion)
 
     if not pkg_dir.exists():
-        setup_kernel_package(ctx, kversion, arch, compile_only, always_use_gcc8)
+        setup_kernel_package(
+            ctx,
+            kversion,
+            arch,
+            compile_only,
+            always_use_gcc8,
+            kernel_src_dir,
+            git_source,
+        )
 
+    manifest: KernelManifest = {}
     with open(pkg_dir / "kernel.manifest", "r") as f:
         manifest = json.load(f)
+
+    if "kernel_source_dir" not in manifest:
+        raise Exit(
+            "corrupted manifest does not contain 'kernel_source_dir' source directory"
+        )
+
+    KernelBuildPaths.linux_stable = Path(manifest["kernel_source_dir"])
 
     if "gdb_port" not in manifest:
         port = find_free_gdb_port()
@@ -196,7 +221,7 @@ def init(
     with open(pkg_dir / "kernel.manifest", "w") as f:
         json.dump(manifest, f)
 
-    ctx.run(f"rm -f {KernelBuildPaths.kernel_sources_dir}/linux-*", warn=True)
+    ctx.run(f"rm -f {KernelBuildPaths.linux_stable}/../linux-*", warn=True)
 
     add_gdb_script(ctx, kversion, port)
 
