@@ -139,16 +139,16 @@ class BuildContext:
 
 def clone_kernel_source(
     ctx: InvokeContext,
+    repo_link: str,
     kernel_version: KernelVersion | None = None,
-    repo_link: str | None = None,
+    shallow_clone: bool = False,
 ) -> None:
     KernelBuildPaths.linux_stable.mkdir(parents=True)
 
-    if repo_link is None:
-        repo_link = DEFAULT_GIT_SOURCE
-        git_cmd = "git clone"
-    else:
+    if shallow_clone:
         git_cmd = "git clone --depth=1"
+    else:
+        git_cmd = "git clone"
 
     if kernel_version is not None and kernel_version.branch != "master":
         git_cmd += f" -b {kernel_version.branch} --single-branch"
@@ -162,7 +162,7 @@ def clone_kernel_source(
 
 def discover_latest_patch(ctx: InvokeContext, major: int, minor: int) -> int:
     if not KernelBuildPaths.linux_stable.exists():
-        clone_kernel_source(ctx)
+        clone_kernel_source(ctx, DEFAULT_GIT_SOURCE)
     tag_res = ctx.run(
         f"cd {KernelBuildPaths.linux_stable} && git tag | grep 'v{major}.{minor}.*$' | sort -V | tail -1",
         hide=True,
@@ -175,10 +175,16 @@ def checkout_kernel(
     ctx: InvokeContext,
     kernel_version: KernelVersion,
     git_source: str,
+    shallow_clone: bool,
     pull: bool = False,
 ) -> None:
     if not KernelBuildPaths.linux_stable.exists():
-        clone_kernel_source(ctx, kernel_version=kernel_version, repo_link=git_source)
+        clone_kernel_source(
+            ctx,
+            kernel_version=kernel_version,
+            repo_link=git_source,
+            shallow_clone=shallow_clone,
+        )
 
     if pull:
         ctx.run(f"cd {KernelBuildPaths.linux_stable} && git pull")
@@ -220,9 +226,14 @@ def make_kernel(run: Runner, sources_dir: Path, compile_only: bool) -> None:
 
 
 @task  # type: ignore
-def checkout(ctx: InvokeContext, kernel_version: str) -> None:
+def checkout(
+    ctx: InvokeContext, kernel_version: str, shallow_clone: bool = False
+) -> None:
     checkout_kernel(
-        ctx, KernelVersion.from_str(ctx, kernel_version), DEFAULT_GIT_SOURCE
+        ctx,
+        KernelVersion.from_str(ctx, kernel_version),
+        DEFAULT_GIT_SOURCE,
+        shallow_clone,
     )
 
 
@@ -349,6 +360,7 @@ def build_kernel(
     compile_only: bool = False,
     always_use_gcc8: bool = False,
     kernel_src_dir: str | None = None,
+    shallow_clone: bool = False,
 ) -> None:
     if arch is None:
         arch = Arch.local()
@@ -360,7 +372,7 @@ def build_kernel(
 
     context = BuildContext(kversion)
     context.acquire()
-    checkout_kernel(ctx, kversion, git_source)
+    checkout_kernel(ctx, kversion, git_source, shallow_clone)
 
     run_cmd = ctx.run
     source_dir = KernelBuildPaths.linux_stable
