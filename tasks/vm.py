@@ -87,6 +87,7 @@ def setup_kernel_package(
     always_use_gcc8: bool,
     kernel_src_dir: str | None,
     git_source: str,
+    shallow_clone: bool,
 ) -> None:
     build_kernel(
         ctx,
@@ -96,6 +97,7 @@ def setup_kernel_package(
         always_use_gcc8=always_use_gcc8,
         kernel_src_dir=kernel_src_dir,
         git_source=git_source,
+        shallow_clone=shallow_clone,
     )
     rootfs_build(ctx, kernel_version)
 
@@ -167,6 +169,7 @@ def init(
     always_use_gcc8: bool = False,
     kernel_src_dir: str | None = None,
     git_source: str = DEFAULT_GIT_SOURCE,
+    shallow_clone: bool = False,
 ) -> None:
     if platform_arch is None:
         arch = Arch.local()
@@ -185,6 +188,7 @@ def init(
             always_use_gcc8,
             kernel_src_dir,
             git_source,
+            shallow_clone,
         )
 
     manifest: KernelManifest = {}
