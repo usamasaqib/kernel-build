@@ -155,10 +155,6 @@ def clone_kernel_source(
 
     ctx.run(f"{git_cmd} {repo_link} {KernelBuildPaths.linux_stable}")
 
-    # restart compiler if we had to clone the kernel sources again
-    cc = get_compiler(ctx, KernelBuildPaths.kernel_sources_dir)
-    cc.stop()
-
 
 def discover_latest_patch(ctx: InvokeContext, major: int, minor: int) -> int:
     if not KernelBuildPaths.linux_stable.exists():
@@ -177,7 +173,8 @@ def checkout_kernel(
     git_source: str,
     shallow_clone: bool,
     pull: bool = False,
-) -> None:
+) -> bool:
+    cloned = False
     if not KernelBuildPaths.linux_stable.exists():
         clone_kernel_source(
             ctx,
@@ -185,12 +182,15 @@ def checkout_kernel(
             repo_link=git_source,
             shallow_clone=shallow_clone,
         )
+        cloned = True
 
     if pull:
         ctx.run(f"cd {KernelBuildPaths.linux_stable} && git pull")
 
     info(f"[+] Checking out tag {kernel_version}")
     ctx.run(f"cd {KernelBuildPaths.linux_stable} && git checkout {kernel_version}")
+
+    return cloned
 
 
 @task  # type: ignore
@@ -351,6 +351,10 @@ def requires_gcc8(kernel_version: KernelVersion) -> bool:
     return True
 
 
+def use_docker_compiler(kernel_version: KernelVersion, always_use_gcc8: bool) -> bool:
+    return requires_gcc8(kernel_version) or always_use_gcc8
+
+
 def build_kernel(
     ctx: InvokeContext,
     kversion: KernelVersion,
@@ -372,11 +376,15 @@ def build_kernel(
 
     context = BuildContext(kversion)
     context.acquire()
-    checkout_kernel(ctx, kversion, git_source, shallow_clone)
+    cloned = checkout_kernel(ctx, kversion, git_source, shallow_clone)
+    if cloned and use_docker_compiler(kversion, always_use_gcc8):
+        # restart compiler if we had to clone the kernel sources again
+        cc = get_compiler(ctx, KernelBuildPaths.kernel_sources_dir)
+        cc.stop()
 
     run_cmd = ctx.run
     source_dir = KernelBuildPaths.linux_stable
-    if requires_gcc8(kversion) or always_use_gcc8:
+    if use_docker_compiler(kversion, always_use_gcc8):
         cc = get_compiler(ctx, KernelBuildPaths.kernel_sources_dir)
         run_cmd = cc.exec
         source_dir = CONTAINER_LINUX_BUILD_PATH / "linux-stable"
