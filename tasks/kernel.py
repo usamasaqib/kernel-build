@@ -77,7 +77,7 @@ class KernelVersion:
 
         broken = v.split(".")
         if len(broken) < 2 or len(broken) > 3:
-            info(f"Using branch name instead of tag {v}")
+            info(f"Using branch name '{v}' instead of tag")
             return KernelVersion(0, 0, 0, v)
 
         try:
