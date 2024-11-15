@@ -16,6 +16,7 @@ from tasks.kernel import (
     DEFAULT_GIT_SOURCE,
     KernelManifest,
 )
+from tasks.qemu import generate_qemu_cmdline
 from tasks.rootfs import rootfs_build
 from tasks.tool import Exit
 from invoke.context import Context as InvokeContext
@@ -26,6 +27,11 @@ from typing import Optional
 
 IP_ADDR = "169.254.0.%s"
 GUEST_ADDR = "169.254.0.%s"
+DEFAULT_CPUS = 4
+DEFAULT_MEMORY = "8G"
+DEFAULT_KERNEL_CMDLINE = (
+    "console=ttyS0 acpi=off panic=-1 root=/dev/vda rw net.ifnames=0 reboot=t nokaslr"
+)
 
 
 def tap_interface_name() -> str:
@@ -170,6 +176,10 @@ def init(
     kernel_src_dir: str | None = None,
     git_source: str = DEFAULT_GIT_SOURCE,
     shallow_clone: bool = False,
+    cpus: int = DEFAULT_CPUS,
+    memory: str = DEFAULT_MEMORY,
+    append: str = "",
+    wait_for_gdb: bool = False,
 ) -> None:
     if platform_arch is None:
         arch = Arch.local()
@@ -203,31 +213,39 @@ def init(
     KernelBuildPaths.linux_stable = Path(manifest["kernel_source_dir"])
 
     if "gdb_port" not in manifest:
-        port = find_free_gdb_port()
-        if port == 0:
+        gdb_port = find_free_gdb_port()
+        if gdb_port == 0:
             raise Exit("unable to find free port for gdb server")
     else:
-        port = manifest["gdb_port"]
-
-    scripts_dir = os.path.join(".", "scripts")
-    qemu_script = os.path.abspath(os.path.join(scripts_dir, "qemu-launch.sh"))
+        gdb_port = manifest["gdb_port"]
 
     tap = setup_tap_interface(ctx, kversion)
+    kernel_cmdline = DEFAULT_KERNEL_CMDLINE + f" {append}"
 
     kimage = get_kernel_image_name(arch)
-    ctx.run(
-        f"echo 'sudo {qemu_script} {pkg_dir.absolute()}/rootfs.qcow2 {pkg_dir.absolute()}/{kimage} {tap} {port}' > {pkg_dir}/run.sh"
+    qemu_cmdline = generate_qemu_cmdline(
+        pkg_dir / "rootfs.qcow2",
+        pkg_dir / kimage,
+        kernel_cmdline,
+        tap,
+        gdb_port,
+        wait_for_gdb,
+        memory,
+        cpus,
     )
-    ctx.run(f"chmod +x {pkg_dir.absolute()}/run.sh")
+    with open(f"{pkg_dir}/run.sh", "w") as f:
+        f.write(qemu_cmdline)
+
+    ctx.run(f"chmod +x {pkg_dir}/run.sh")
 
     manifest["tap_name"] = tap
-    manifest["gdb_port"] = port
+    manifest["gdb_port"] = gdb_port
     with open(pkg_dir / "kernel.manifest", "w") as f:
         json.dump(manifest, f)
 
     ctx.run(f"rm -f {KernelBuildPaths.linux_stable}/../linux-*", warn=True)
 
-    add_gdb_script(ctx, kversion, port)
+    add_gdb_script(ctx, kversion, gdb_port)
 
 
 @task  # type: ignore
