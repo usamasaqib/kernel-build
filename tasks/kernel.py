@@ -28,14 +28,14 @@ class KernelManifest(TypedDict, total=False):
 
 
 class KernelVersion:
-    def __init__(self, major: int, minor: int, patch: int, branch: str = "master"):
+    def __init__(self, major: int, minor: int, patch: int, branch: str = ""):
         self.major = major
         self.minor = minor
         self.patch = patch
         self.branch = branch
 
     def __str__(self) -> str:
-        if self.branch == "master":
+        if self.branch == "":
             return f"v{self.major}.{self.minor}.{self.patch}"
         return self.branch
 
@@ -150,7 +150,7 @@ def clone_kernel_source(
     else:
         git_cmd = "git clone"
 
-    if kernel_version is not None and kernel_version.branch != "master":
+    if kernel_version is not None and kernel_version.branch != "":
         git_cmd += f" -b {kernel_version.branch} --single-branch"
 
     ctx.run(f"{git_cmd} {repo_link} {KernelBuildPaths.linux_stable}")
@@ -345,7 +345,7 @@ def build(
 
 
 def requires_gcc8(kernel_version: KernelVersion) -> bool:
-    if kernel_version.branch != "master" or kernel_version > KernelVersion(5, 5, 0):
+    if kernel_version.branch != "" or kernel_version > KernelVersion(5, 5, 0):
         return False
 
     return True
