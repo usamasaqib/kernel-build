@@ -72,23 +72,20 @@ class KernelVersion:
 
     @staticmethod
     def from_str(ctx: Optional[InvokeContext], v: str) -> KernelVersion:
-        if v[0] == "v":
-            v = v[1:]
-
         broken = v.split(".")
-        if len(broken) < 2 or len(broken) > 3:
+        if len(broken) < 2 or len(broken) > 3 or "-rc" in v:
             info(f"Using branch name '{v}' instead of tag")
             return KernelVersion(0, 0, 0, v)
 
-        try:
-            major = int(broken[0])
-            minor = int(broken[1])
-            if len(broken) == 3:
-                patch = int(broken[2])
-            else:
-                patch = -1
-        except ValueError as e:
-            raise e
+        major = int(broken[0])
+        if broken[0][0] == "v":
+            major = int(broken[0][1:])
+
+        minor = int(broken[1])
+        if len(broken) == 3:
+            patch = int(broken[2])
+        else:
+            patch = -1
 
         if patch == -1:
             return KernelVersion(major, minor, discover_latest_patch(ctx, major, minor))
@@ -321,7 +318,7 @@ EXTRA_CONFIG = [
         "extra_config": "path to file containing extra KConfig options",
         "compile_only": "only rebuild bzImage",
         "always_use_gcc8": "always compile in docker container with gcc-8",
-    }
+    },
 )
 def build(
     ctx: InvokeContext,
