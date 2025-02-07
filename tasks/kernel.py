@@ -77,9 +77,10 @@ class KernelVersion:
             info(f"Using branch name '{v}' instead of tag")
             return KernelVersion(0, 0, 0, v)
 
-        major = int(broken[0])
         if broken[0][0] == "v":
             major = int(broken[0][1:])
+        else:
+            major = int(broken[0])
 
         minor = int(broken[1])
         if len(broken) == 3:
