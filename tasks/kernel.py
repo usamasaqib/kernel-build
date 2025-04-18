@@ -33,6 +33,7 @@ class KernelVersion:
         self.minor = minor
         self.patch = patch
         self.branch = branch
+        self.worktree = f"{self}-build/{self}"
 
     def __str__(self) -> str:
         if self.branch == "":
@@ -101,57 +102,39 @@ class KernelBuildPaths:
     configs_dir = kernel_dir / "configs"
 
 
-class BuildContext:
-    lockfile = KernelBuildPaths.kernel_dir / "build.context.lock"
+def bare_repository(ctx, repo):
+    description = repo / "description"
+    if not description.exists():
+        return False
 
-    def __init__(self, kernel_version: KernelVersion):
-        self.kernel_version = kernel_version
+    with open(description, 'r') as f:
+        desc = f.read().strip()
 
-    def acquire(self) -> None:
-        _lockfile = BuildContext.lockfile
-        if _lockfile.exists():
-            with open(_lockfile, "r") as lf:
-                kv = KernelVersion.from_str(None, lf.read().split("\n")[0])
-                if self.kernel_version != kv:
-                    raise Exit(f"a build context is already active for kernel {kv}")
-        else:
-            with open(_lockfile, "w") as lf:
-                lf.write(str(self.kernel_version))
+    if desc == "bare repository":
+        return True
 
-    def release(self) -> None:
-        try:
-            BuildContext.lockfile.unlink()
-        except Exception as e:
-            raise e
-
-    @staticmethod
-    def from_current() -> BuildContext:
-        _lockfile = BuildContext.lockfile
-        if _lockfile.exists():
-            with open(_lockfile, "r") as lf:
-                kv = KernelVersion.from_str(None, lf.read().split("\n")[0])
-                return BuildContext(kv)
-
-        raise Exit("No active build context")
+    return False
 
 
 def clone_kernel_source(
     ctx: InvokeContext,
     repo_link: str,
     kernel_version: KernelVersion | None = None,
-    shallow_clone: bool = False,
 ) -> None:
     KernelBuildPaths.linux_stable.mkdir(parents=True)
 
-    if shallow_clone:
-        git_cmd = "git clone --depth=1"
-    else:
-        git_cmd = "git clone"
+    git_cmd = "git clone --bare"
 
     if kernel_version is not None and kernel_version.branch != "":
         git_cmd += f" -b {kernel_version.branch} --single-branch"
 
     ctx.run(f"{git_cmd} {repo_link} {KernelBuildPaths.linux_stable}")
+    ctx.run(f"cd {KernelBuildPaths.linux_stable} && git worktree add master")
+
+    description = KernelBuildPaths.linux_stable / "description"
+    if description.exists():
+        with open(description, 'w') as f:
+            f.write("bare repository")
 
 
 def discover_latest_patch(ctx: InvokeContext, major: int, minor: int) -> int:
@@ -169,7 +152,6 @@ def checkout_kernel(
     ctx: InvokeContext,
     kernel_version: KernelVersion,
     git_source: str,
-    shallow_clone: bool,
     pull: bool = False,
 ) -> bool:
     cloned = False
@@ -178,21 +160,28 @@ def checkout_kernel(
             ctx,
             kernel_version=kernel_version,
             repo_link=git_source,
-            shallow_clone=shallow_clone,
         )
         cloned = True
 
     if pull:
         ctx.run(f"cd {KernelBuildPaths.linux_stable} && git pull")
 
-    info(f"[+] Checking out tag {kernel_version}")
-    ctx.run(f"cd {KernelBuildPaths.linux_stable} && git checkout {kernel_version}")
+    info(f"[+] Creating new worktree for tag {kernel_version}")
+    worktree = KernelBuildPaths.linux_stable / kernel_version.worktree
+    if not worktree.exists():
+        ctx.run(
+            f"cd {KernelBuildPaths.linux_stable} && git worktree add {kernel_version.worktree}"
+        )
+
+    ctx.run(f"cd {worktree} && git checkout tags/{kernel_version}")
 
     return cloned
 
 
 @task  # type: ignore
-def make_config(ctx: InvokeContext, extra_config: Optional[str]) -> None:
+def make_config(
+    ctx: InvokeContext, source_dir: Path, extra_config: Optional[str]
+) -> None:
     if extra_config is None:
         all_configs = set(EXTRA_CONFIG)
     else:
@@ -201,10 +190,10 @@ def make_config(ctx: InvokeContext, extra_config: Optional[str]) -> None:
     if extra_config is not None:
         all_configs = set([Path(p) for p in extra_config.split(',')] + EXTRA_CONFIG)
 
-    build_path = str(KernelBuildPaths.linux_stable)
+    build_path = str(source_dir)
     ctx.run(f"make -C {build_path} KCONFIG_CONFIG=start.config defconfig")
 
-    start_config = KernelBuildPaths.linux_stable / "start.config"
+    start_config = source_dir / "start.config"
     for cfg in all_configs:
         ctx.run(f"tee -a < {cfg} {start_config}")
 
@@ -225,13 +214,13 @@ def make_kernel(run: Runner, sources_dir: Path, compile_only: bool) -> None:
 
 @task  # type: ignore
 def checkout(
-    ctx: InvokeContext, kernel_version: str, shallow_clone: bool = False
+    ctx: InvokeContext,
+    kernel_version: str,
 ) -> None:
     checkout_kernel(
         ctx,
         KernelVersion.from_str(ctx, kernel_version),
         DEFAULT_GIT_SOURCE,
-        shallow_clone,
     )
 
 
@@ -249,25 +238,28 @@ def get_kernel_image_name(arch: Arch) -> str:
 
 
 @task  # type: ignore
-def build_package(ctx: InvokeContext, version: KernelVersion, arch: Arch) -> None:
-    deb_files = glob(f"{KernelBuildPaths.kernel_sources_dir}/*.deb")
+def build_package(
+    ctx: InvokeContext, build_dir: Path, version: KernelVersion, arch: Arch
+) -> None:
+
+    df = KernelBuildPaths.linux_stable / version.worktree
+    deb_files = glob(f"{df}/../*.deb")
 
     kdir = get_kernel_pkg_dir(version)
     kdir.mkdir(exist_ok=True)
-
     for pkg in deb_files:
         ctx.run(f"mv {pkg} {kdir}")
 
-    ctx.run(f"mv {KernelBuildPaths.linux_stable}/vmlinux {kdir}")
+    ctx.run(f"mv {build_dir}/vmlinux {kdir}")
     ctx.run(
-        f"mv {KernelBuildPaths.linux_stable}/arch/{arch.kernel_arch}/boot/{get_kernel_image_name(arch)} {kdir}"
+        f"mv {build_dir}/arch/{arch.kernel_arch}/boot/{get_kernel_image_name(arch)} {kdir}"
     )
 
     linux_source_dir = kdir / "linux-source"
     ctx.run(f"rm -rf {linux_source_dir}")
     linux_source_dir.mkdir()
 
-    upstream = glob(f"{KernelBuildPaths.linux_stable}/../**/linux-*", recursive=True)
+    upstream = glob(f"{build_dir}/../**/linux-*", recursive=True)
     found = False
     for f in upstream:
         if "orig.tar.gz" in f:
@@ -309,6 +301,11 @@ EXTRA_CONFIG = [
     KernelBuildPaths.configs_dir / "trace.config",
     KernelBuildPaths.configs_dir / "remove-drivers.config",
     KernelBuildPaths.configs_dir / "debug.config",
+    KernelBuildPaths.configs_dir / "lockdep.config",
+    KernelBuildPaths.configs_dir / "docker.config",
+    KernelBuildPaths.configs_dir / "net.config",
+    KernelBuildPaths.configs_dir / "netfilter.config",
+    KernelBuildPaths.configs_dir / "net-drivers.config",
 ]
 
 
@@ -362,7 +359,6 @@ def build_kernel(
     compile_only: bool = False,
     always_use_gcc8: bool = False,
     kernel_src_dir: str | None = None,
-    shallow_clone: bool = False,
 ) -> None:
     if arch is None:
         arch = Arch.local()
@@ -372,28 +368,26 @@ def build_kernel(
     if kernel_src_dir is not None:
         KernelBuildPaths.linux_stable = Path(kernel_src_dir)
 
-    context = BuildContext(kversion)
-    context.acquire()
-    cloned = checkout_kernel(ctx, kversion, git_source, shallow_clone)
+    cloned = checkout_kernel(ctx, kversion, git_source)
     if cloned and use_docker_compiler(kversion, always_use_gcc8):
         # restart compiler if we had to clone the kernel sources again
         cc = get_compiler(ctx, KernelBuildPaths.kernel_sources_dir)
         cc.stop()
 
     run_cmd = ctx.run
-    source_dir = KernelBuildPaths.linux_stable
+    source_dir = KernelBuildPaths.linux_stable / f"{kversion.worktree}"
     if use_docker_compiler(kversion, always_use_gcc8):
         cc = get_compiler(ctx, KernelBuildPaths.kernel_sources_dir)
         run_cmd = cc.exec
-        source_dir = CONTAINER_LINUX_BUILD_PATH / "linux-stable"
+        source_dir = CONTAINER_LINUX_BUILD_PATH / "linux-stable" / f"{kversion.worktree}"
 
-    make_config(ctx, extra_config)
+    make_config(ctx, source_dir, extra_config)
     make_kernel(run_cmd, source_dir, compile_only)
-    build_package(ctx, kversion, arch)
+    build_package(ctx, source_dir, kversion, arch)
 
     manifest: KernelManifest = {}
     manifest = manifest_add_kuuid(manifest, kversion)
-    manifest = manifest_add_kernel_source_dir(manifest, KernelBuildPaths.linux_stable)
+    manifest = manifest_add_kernel_source_dir(manifest, source_dir)
     save_manifest(manifest, kversion)
 
     info(f"[+] Kernel {kversion} build complete")
@@ -401,31 +395,24 @@ def build_kernel(
 
 @task  # type: ignore
 def clean(
-    ctx: InvokeContext, kernel_version: str | None = None, branch: str | None = None
+    ctx: InvokeContext,
+    kernel_version: str | None = None,
+    full: bool = False,
 ) -> None:
-    if kernel_version is None:
-        context = BuildContext.from_current()
-        kversion = context.kernel_version
-    else:
-        kversion = KernelVersion.from_str(ctx, kernel_version)
-        context = BuildContext(kversion)
+    kversion = KernelVersion.from_str(ctx, kernel_version)
 
-    if branch is None:
-        branch = "master"
+    if full:
+        ctx.run(
+            f"cd {KernelBuildPaths.linux_stable} && git worktree remove {kversion.worktree} --force"
+        )
+        return
 
-    ctx.run(f"make -C {KernelBuildPaths.linux_stable} clean")
-    ctx.run(f"make -C {KernelBuildPaths.linux_stable}/tools clean", warn=True)
-    ctx.run(f"cd {KernelBuildPaths.linux_stable} && git checkout {branch}")
-    ctx.run(f"make -C {KernelBuildPaths.linux_stable} clean")
-    ctx.run(f"cd {KernelBuildPaths.linux_stable} && rm .config", warn=True)
-    ctx.run(f"cd {KernelBuildPaths.linux_stable} && rm -r debian", warn=True)
-    ctx.run(f"cd {KernelBuildPaths.kernel_sources_dir} && rm *", warn=True)
-    ctx.run(f"rm -f {KernelBuildPaths.linux_stable}/vmlinux-gdb.py")
-    ctx.run(f"rm -f {KernelBuildPaths.linux_stable}/linux.tar.gz")
+    build_dir = KernelBuildPaths.linux_stable / f"{kversion}"
+    ctx.run(f"make -C {build_dir} clean")
+    ctx.run(f"make -C {build_dir}/tools clean", warn=True)
+    # TODO: remove after snapshotting feature added
+    ctx.run(f"cd {KernelBuildPaths.linux_stable} && rm -f linux-*")
 
     if kversion < KernelVersion(5, 5, 0):
         cc = get_compiler(ctx, KernelBuildPaths.linux_stable)
         cc.exec("rm -f /tmp/*", allow_fail=True)
-
-    info(f"[+] Releasing build context for kernel {kversion}")
-    context.release()

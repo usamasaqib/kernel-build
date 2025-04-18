@@ -8,6 +8,7 @@ from glob import glob
 from tasks.arch import Arch
 from tasks.kernel import (
     build_kernel,
+    clean as kernel_clean,
     get_kernel_pkg_dir,
     get_kernel_image_name,
     KernelBuildPaths,
@@ -93,7 +94,6 @@ def setup_kernel_package(
     always_use_gcc8: bool,
     kernel_src_dir: str | None,
     git_source: str,
-    shallow_clone: bool,
 ) -> None:
     build_kernel(
         ctx,
@@ -103,7 +103,6 @@ def setup_kernel_package(
         always_use_gcc8=always_use_gcc8,
         kernel_src_dir=kernel_src_dir,
         git_source=git_source,
-        shallow_clone=shallow_clone,
     )
     rootfs_build(ctx, kernel_version)
 
@@ -129,13 +128,13 @@ def find_free_gdb_port() -> int:
 
 
 def add_gdb_script(
-    ctx: InvokeContext, kernel_version: KernelVersion, port: int
+    ctx: InvokeContext, build_path: Path, kernel_version: KernelVersion, port: int
 ) -> None:
     kdir = get_kernel_pkg_dir(kernel_version)
     if not os.path.exists(kdir):
         raise Exit(f"Kernel directory '{kdir}' not present")
 
-    cfg = KernelBuildPaths.linux_stable / ".config"
+    cfg = build_path / ".config"
     ctx.run(f"cp {cfg} {kdir}/linux-source")
 
     run_cmd = ctx.run
@@ -154,7 +153,7 @@ def add_gdb_script(
     with open(gdb_script, "w") as f:
         f.write("#!/bin/bash\n")
         f.write(f'gdb -ex "add-auto-load-safe-path {src_dir}" -ex "file {dbg_img}" -ex "set arch i386:x86-64:intel" \
-                -ex "target remote localhost:{port}" -ex "source {vmlinux_gdb}" -ex "set disassembly-flavor inter" \
+                -ex "target remote localhost:{port}" -ex "source {vmlinux_gdb}" -ex "set disassembly-flavor intel" \
                 -ex "set pagination off"\n')
 
     ctx.run(f"chmod +x {gdb_script}")
@@ -175,7 +174,6 @@ def init(
     always_use_gcc8: bool = False,
     kernel_src_dir: str | None = None,
     git_source: str = DEFAULT_GIT_SOURCE,
-    shallow_clone: bool = False,
     cpus: int = DEFAULT_CPUS,
     memory: str = DEFAULT_MEMORY,
     append: str = "",
@@ -198,7 +196,6 @@ def init(
             always_use_gcc8,
             kernel_src_dir,
             git_source,
-            shallow_clone,
         )
 
     manifest: KernelManifest = {}
@@ -210,7 +207,7 @@ def init(
             "corrupted manifest does not contain 'kernel_source_dir' source directory"
         )
 
-    KernelBuildPaths.linux_stable = Path(manifest["kernel_source_dir"])
+    build_path = Path(manifest["kernel_source_dir"])
 
     if "gdb_port" not in manifest:
         gdb_port = find_free_gdb_port()
@@ -243,9 +240,7 @@ def init(
     with open(pkg_dir / "kernel.manifest", "w") as f:
         json.dump(manifest, f)
 
-    ctx.run(f"rm -f {KernelBuildPaths.linux_stable}/../linux-*", warn=True)
-
-    add_gdb_script(ctx, kversion, gdb_port)
+    add_gdb_script(ctx, build_path, kversion, gdb_port)
 
 
 @task  # type: ignore
@@ -257,15 +252,22 @@ def cleanup_taps(ctx: InvokeContext) -> None:
 
 
 @task  # type: ignore
-def clean(ctx: InvokeContext, kernel_version: str) -> None:
+def destroy(ctx: InvokeContext, kernel_version: str, full: bool = False) -> None:
     kversion = KernelVersion.from_str(ctx, kernel_version)
     kernel_dir = get_kernel_pkg_dir(kversion)
     manifest_file = get_kernel_pkg_dir(kversion) / "kernel.manifest"
-    with open(manifest_file, "r") as f:
-        manifest = json.load(f)
 
-    if "tap_name" in manifest:
-        name = manifest["tap_name"]
-        ctx.run(f"sudo ip link del {name}", warn=True)
+    try:
+        with open(manifest_file, "r") as f:
+            manifest = json.load(f)
+
+        if "tap_name" in manifest:
+            name = manifest["tap_name"]
+            ctx.run(f"sudo ip link del {name}", warn=True)
+    except:
+        pass
 
     ctx.run(f"rm -rf {kernel_dir}")
+
+    if full:
+        kernel_clean(ctx, kernel_version, full=full)
