@@ -71,6 +71,9 @@ class KernelVersion:
         suffix = f"{self}".replace("/", "-")
         return f"kernel-{suffix}"
 
+    def worktree_base(self) -> str:
+        return f"{self}-build"
+
     @staticmethod
     def from_str(ctx: Optional[InvokeContext], v: str) -> KernelVersion:
         broken = v.split(".")
@@ -241,7 +244,6 @@ def get_kernel_image_name(arch: Arch) -> str:
 def build_package(
     ctx: InvokeContext, build_dir: Path, version: KernelVersion, arch: Arch
 ) -> None:
-
     df = KernelBuildPaths.linux_stable / version.worktree
     deb_files = glob(f"{df}/../*.deb")
 
@@ -301,11 +303,11 @@ EXTRA_CONFIG = [
     KernelBuildPaths.configs_dir / "trace.config",
     KernelBuildPaths.configs_dir / "remove-drivers.config",
     KernelBuildPaths.configs_dir / "debug.config",
-    KernelBuildPaths.configs_dir / "lockdep.config",
     KernelBuildPaths.configs_dir / "docker.config",
     KernelBuildPaths.configs_dir / "net.config",
     KernelBuildPaths.configs_dir / "netfilter.config",
     KernelBuildPaths.configs_dir / "net-drivers.config",
+    # KernelBuildPaths.configs_dir / "lockdep.config",
 ]
 
 
@@ -379,7 +381,9 @@ def build_kernel(
     if use_docker_compiler(kversion, always_use_gcc8):
         cc = get_compiler(ctx, KernelBuildPaths.kernel_sources_dir)
         run_cmd = cc.exec
-        source_dir = CONTAINER_LINUX_BUILD_PATH / "linux-stable" / f"{kversion.worktree}"
+        source_dir = (
+            CONTAINER_LINUX_BUILD_PATH / "linux-stable" / f"{kversion.worktree}"
+        )
 
     make_config(ctx, source_dir, extra_config)
     make_kernel(run_cmd, source_dir, compile_only)
@@ -396,7 +400,7 @@ def build_kernel(
 @task  # type: ignore
 def clean(
     ctx: InvokeContext,
-    kernel_version: str | None = None,
+    kernel_version: str,
     full: bool = False,
 ) -> None:
     kversion = KernelVersion.from_str(ctx, kernel_version)
@@ -405,9 +409,12 @@ def clean(
         ctx.run(
             f"cd {KernelBuildPaths.linux_stable} && git worktree remove {kversion.worktree} --force"
         )
+        ctx.run(
+            f"cd {KernelBuildPaths.linux_stable} && rm -rf {kversion.worktree_base()}"
+        )
         return
 
-    build_dir = KernelBuildPaths.linux_stable / f"{kversion}"
+    build_dir = KernelBuildPaths.linux_stable / f"{kversion.worktree}"
     ctx.run(f"make -C {build_dir} clean")
     ctx.run(f"make -C {build_dir}/tools clean", warn=True)
     # TODO: remove after snapshotting feature added

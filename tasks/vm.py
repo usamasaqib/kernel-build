@@ -221,7 +221,7 @@ def init(
 
     kimage = get_kernel_image_name(arch)
     qemu_cmdline = generate_qemu_cmdline(
-        pkg_dir / "rootfs.qcow2",
+        pkg_dir / "overlay.qcow2",
         pkg_dir / kimage,
         kernel_cmdline,
         tap,
