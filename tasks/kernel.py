@@ -242,7 +242,11 @@ def get_kernel_image_name(arch: Arch) -> str:
 
 @task  # type: ignore
 def build_package(
-    ctx: InvokeContext, build_dir: Path, version: KernelVersion, arch: Arch
+    ctx: InvokeContext,
+    build_dir: Path,
+    version: KernelVersion,
+    arch: Arch,
+    compile_only: bool,
 ) -> None:
     df = KernelBuildPaths.linux_stable / version.worktree
     deb_files = glob(f"{df}/../*.deb")
@@ -257,6 +261,9 @@ def build_package(
         f"mv {build_dir}/arch/{arch.kernel_arch}/boot/{get_kernel_image_name(arch)} {kdir}"
     )
 
+    if compile_only:
+        return
+
     linux_source_dir = kdir / "linux-source"
     ctx.run(f"rm -rf {linux_source_dir}")
     linux_source_dir.mkdir()
@@ -270,7 +277,7 @@ def build_package(
             found = True
 
     if not found:
-        raise Exit("unable to find source package")
+        raise Exit("kernel-build: build_package: unable to find source package")
 
     ctx.run(f"tar -xvf {kdir}/linux.tar.gz -C {linux_source_dir} --strip-components=1")
 
@@ -387,7 +394,7 @@ def build_kernel(
 
     make_config(ctx, source_dir, extra_config)
     make_kernel(run_cmd, source_dir, compile_only)
-    build_package(ctx, source_dir, kversion, arch)
+    build_package(ctx, source_dir, kversion, arch, compile_only)
 
     manifest: KernelManifest = {}
     manifest = manifest_add_kuuid(manifest, kversion)
