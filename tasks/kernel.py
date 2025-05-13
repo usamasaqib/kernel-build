@@ -182,10 +182,13 @@ def checkout_kernel(
 
 
 @task  # type: ignore
-def make_config(ctx: InvokeContext, kernel_version: str, extra_config: Optional[str] = None):
+def make_config(
+    ctx: InvokeContext, kernel_version: str, extra_config: Optional[str] = None
+):
     kversion = KernelVersion.from_str(ctx, kernel_version)
     source_dir = KernelBuildPaths.linux_stable / f"{kversion.worktree}"
     _make_config(ctx, source_dir, extra_config)
+
 
 def _make_config(
     ctx: InvokeContext, source_dir: Path, extra_config: Optional[str]
