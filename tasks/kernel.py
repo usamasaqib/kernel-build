@@ -182,7 +182,12 @@ def checkout_kernel(
 
 
 @task  # type: ignore
-def make_config(
+def make_config(ctx: InvokeContext, kernel_version: str, extra_config: Optional[str] = None):
+    kversion = KernelVersion.from_str(ctx, kernel_version)
+    source_dir = KernelBuildPaths.linux_stable / f"{kversion.worktree}"
+    _make_config(ctx, source_dir, extra_config)
+
+def _make_config(
     ctx: InvokeContext, source_dir: Path, extra_config: Optional[str]
 ) -> None:
     if extra_config is None:
@@ -191,6 +196,7 @@ def make_config(
         all_configs = set()
 
     if extra_config is not None:
+        print(EXTRA_CONFIG)
         all_configs = set([Path(p) for p in extra_config.split(',')] + EXTRA_CONFIG)
 
     build_path = str(source_dir)
@@ -314,6 +320,7 @@ EXTRA_CONFIG = [
     KernelBuildPaths.configs_dir / "net.config",
     KernelBuildPaths.configs_dir / "netfilter.config",
     KernelBuildPaths.configs_dir / "net-drivers.config",
+    KernelBuildPaths.configs_dir / "usb.config",
     # KernelBuildPaths.configs_dir / "lockdep.config",
 ]
 
@@ -392,7 +399,7 @@ def build_kernel(
             CONTAINER_LINUX_BUILD_PATH / "linux-stable" / f"{kversion.worktree}"
         )
 
-    make_config(ctx, source_dir, extra_config)
+    _make_config(ctx, source_dir, extra_config)
     make_kernel(run_cmd, source_dir, compile_only)
     build_package(ctx, source_dir, kversion, arch, compile_only)
 
