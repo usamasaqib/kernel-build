@@ -176,7 +176,10 @@ def checkout_kernel(
             f"cd {KernelBuildPaths.linux_stable} && git worktree add {kernel_version.worktree}"
         )
 
-    ctx.run(f"cd {worktree} && git checkout tags/{kernel_version}")
+    if kernel_version.branch != "":
+        ctx.run(f"cd {worktree} && git checkout {kernel_version}")
+    else:
+        ctx.run(f"cd {worktree} && git checkout tags/{kernel_version}")
 
     return cloned
 
@@ -218,11 +221,14 @@ Runner = Callable[[str], Optional[runners.Result]] | CompilerExec
 
 
 def make_kernel(run: Runner, sources_dir: Path, compile_only: bool) -> None:
+    #if compile_only:
+    #    run(f"make -C {sources_dir} -j$(nproc) bzImage KCFLAGS=-ggdb3")
+    #else:
+    #    run(f"DPKG_DEB_OPTIONS=\"--compression=gzip --nocheck\" make -C {sources_dir} -j$(nproc) deb-pkg KCFLAGS=-ggdb3")
     if compile_only:
-        run(f"make -C {sources_dir} -j$(nproc) bzImage KCFLAGS=-ggdb3")
+        run(f"make -C {sources_dir} -j$(nproc) bzImage")
     else:
-        run(f"make -C {sources_dir} -j$(nproc) deb-pkg KCFLAGS=-ggdb3")
-
+        run(f"DPKG_DEB_OPTIONS=\"--compression=gzip --nocheck\" make -C {sources_dir} -j$(nproc) deb-pkg")
 
 @task  # type: ignore
 def checkout(
@@ -323,8 +329,8 @@ EXTRA_CONFIG = [
     KernelBuildPaths.configs_dir / "net.config",
     KernelBuildPaths.configs_dir / "netfilter.config",
     KernelBuildPaths.configs_dir / "net-drivers.config",
-    KernelBuildPaths.configs_dir / "usb.config",
-    # KernelBuildPaths.configs_dir / "lockdep.config",
+    #KernelBuildPaths.configs_dir / "usb.config",
+    #KernelBuildPaths.configs_dir / "lockdep.config",
 ]
 
 
@@ -346,6 +352,7 @@ def build(
     always_use_gcc8: bool = False,
     kernel_src_dir: str | None = None,
     git_source: str = DEFAULT_GIT_SOURCE,
+    no_checkout: bool = False,
 ) -> None:
     build_kernel(
         ctx,
@@ -355,6 +362,7 @@ def build(
         compile_only=compile_only,
         kernel_src_dir=kernel_src_dir,
         git_source=git_source,
+        no_checkout=no_checkout,
     )
 
 
@@ -378,6 +386,7 @@ def build_kernel(
     compile_only: bool = False,
     always_use_gcc8: bool = False,
     kernel_src_dir: str | None = None,
+    no_checkout: bool = False,
 ) -> None:
     if arch is None:
         arch = Arch.local()
@@ -387,7 +396,10 @@ def build_kernel(
     if kernel_src_dir is not None:
         KernelBuildPaths.linux_stable = Path(kernel_src_dir)
 
-    cloned = checkout_kernel(ctx, kversion, git_source)
+    cloned = False
+    if not no_checkout:
+        cloned = checkout_kernel(ctx, kversion, git_source)
+
     if cloned and use_docker_compiler(kversion, always_use_gcc8):
         # restart compiler if we had to clone the kernel sources again
         cc = get_compiler(ctx, KernelBuildPaths.kernel_sources_dir)

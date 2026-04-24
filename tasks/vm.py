@@ -251,6 +251,47 @@ def cleanup_taps(ctx: InvokeContext) -> None:
             ctx.run(f"sudo ip link del {tap}", warn=True)
 
 
+@task(  # type: ignore
+    help={
+        "kernel_version": "kernel version string of the form v6.8 or v5.2.20",
+    }
+)
+def alien_config(ctx: InvokeContext, kernel_version: str) -> None:
+    kversion = KernelVersion.from_str(ctx, kernel_version)
+    pkg_dir = get_kernel_pkg_dir(kversion)
+
+    if not pkg_dir.exists():
+        raise Exit(f"Kernel package directory '{pkg_dir}' does not exist")
+
+    manifest_file = pkg_dir / "kernel.manifest"
+    with open(manifest_file, "r") as f:
+        manifest = json.load(f)
+
+    if "guest_ip" not in manifest:
+        raise Exit("manifest does not contain 'guest_ip'")
+
+    ssh_keys = glob(str(pkg_dir / "vm-*.id_rsa"))
+    ssh_keys = [k for k in ssh_keys if not k.endswith(".pub")]
+    if len(ssh_keys) == 0:
+        raise Exit(f"no SSH key found in {pkg_dir}")
+
+    config = [
+        {
+            "ssh_key_path": str(Path(ssh_keys[0]).absolute()),
+            "ip": manifest["guest_ip"],
+            "arch": "x86",
+            "name": str(kversion),
+            "ssh_user": "root",
+        }
+    ]
+
+    output_path = f"/tmp/alien-config-{kversion}.json"
+    with open(output_path, "w") as f:
+        json.dump(config, f, indent=4)
+
+    print(output_path)
+
+
 @task  # type: ignore
 def destroy(ctx: InvokeContext, kernel_version: str, full: bool = False) -> None:
     kversion = KernelVersion.from_str(ctx, kernel_version)
